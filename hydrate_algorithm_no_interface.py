@@ -2,7 +2,7 @@
 
 # import math, scipy
 from scipy.integrate import quad
-from math import exp, pi, log, sqrt
+from math import exp, pi, log, sqrt, cos
 
 ### Definition of constants
 
@@ -150,7 +150,9 @@ def a_j(T, components: list, j: int):
 def a_jk(T, components: list, coefficients: list, j: int, k: int):
     aj = a_j(T, components, j)
     ak = a_j(T, components, k)
-    kjk = coefficients[j][k]
+    idj = components[j][KEY_FOR_ID]
+    idk = components[k][KEY_FOR_ID]
+    kjk = coefficients[idj][idk]
     return sqrt(aj * ak) * (1 - kjk)
 
 def a_m(T, components: list, coefficients: list):
@@ -182,17 +184,42 @@ def b_m(components: list):
 
 # phij
 
-def lnphi_j(T, P, components: list, coefficients: list, j: int):
+def lnphi_j(T, Pres, components: list, coefficients: list, j: int):
     bj = b_j(components, j)
     bm = b_m(components)
     aj = a_j(T, components, j)
     am = a_m(T, components, coefficients)
-    # TODO
-    nu = 0
 
-    return ( (bj / bm) * (P * nu - R_IDEAL_GAS * T) / (R_IDEAL_GAS * T)
-            - log(P * (nu - bm) / (R_IDEAL_GAS * T))
-            - am * (2 * sqrt(aj/am) - bj/bm ) * log((nu + bm) / nu) / (bm * R_IDEAL_GAS * T)
+    # from equation of state, Z = PV/RT is solution of the cubic equation
+    # Z**3 - Z**2 + (A - B**2 - B)*Z - AB = 0 , where
+    A = am * Pres / ((R_IDEAL_GAS**2) * (T**2))
+    B = bm * Pres / (R_IDEAL_GAS * T)
+
+    # for better readibility, let's define
+    p = -1
+    q = (A - B**2 - B)
+    r = A * B
+    m = q - (p**2) / 3
+    n = r + (2 * p**3 - 9*p*q) / 27
+    delt = (n**2)/4 + (m**3) / 27
+    if delt > 0:
+        Zj = (- p / 3
+             + (sqrt(delt) - n/2) ** (1/3)
+             + (- sqrt(delt) - n/2) ** (1/3)
+        )
+    elif delt < 0:
+        angle = - (n / abs(n)) * sqrt( (- 27 * n**2) / (4 * m**3) )
+        Zj = ( - p / 3
+            + 2 * sqrt(-m / 3) * cos(angle/3)
+        )
+
+    else:
+        print('Error: no known value of Z for delta = 0')
+        # TODO raise error here
+
+    return ( (bj / bm) * (Zj - 1)
+            - log(Zj - B)
+            - (A / B) * (2 * sqrt(aj/am) - bj/bm ) * log(1 + B/Zj)
     )
 
 # fj
@@ -249,4 +276,9 @@ def theta_ij(T, P, structure_cavities: list, components: list, i: int, j:int) ->
 
 ### TESTS
 
-### fortran code
+# tab0 = [1, 2, 3]
+# tab1 = 4
+# tab = [tab0,tab1]
+
+
+# print(tab)
