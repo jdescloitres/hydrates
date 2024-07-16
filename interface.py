@@ -110,6 +110,14 @@ class EntryFocusOut(tk.Entry):
             if event.widget == self.interface.presEnt:
                 self.interface.results['Pressure'] = float(new_text)
                 # print(self.interface.results, 'new pres set')
+        else:
+            if event.widget == self.interface.tempEnt:
+                self.interface.results['Temperature'] = -1
+                print(self.interface.results, 'new temp set')
+            if event.widget == self.interface.presEnt:
+                self.interface.results['Pressure'] = -1
+                print(self.interface.results, 'new pres set')
+
 
         self.master.tk_focusNext().focus()
 
@@ -133,6 +141,13 @@ class EntryFocusOut(tk.Entry):
                 # print(self.interface.results, 'new temp set')
             if event.widget == self.interface.presEnt:
                 self.interface.results['Pressure'] = float(new_text)
+                # print(self.interface.results, 'new pres set')
+        else:
+            if event.widget == self.interface.tempEnt:
+                self.interface.results['Temperature'] = float(-1)
+                # print(self.interface.results, 'new temp set')
+            if event.widget == self.interface.presEnt:
+                self.interface.results['Pressure'] = -1
                 # print(self.interface.results, 'new pres set')
 
         # self.master.tk_focusNext().focus()
@@ -256,12 +271,22 @@ class Hydrate_interface:
         # Other parameters
 
         # Temperature entry
+        # tk.Label(frameLU, text= "Temperature (K) :").grid(sticky= tk.E, row = 7, column = 1, pady = 5, padx = 10)
+        # self.tempEnt = EntryFocusOut(frameLU, width=25, interface=self)
+        # self.tempEnt.grid(row= 7, column = 2, padx = 5, pady = 10, columnspan=2)
+
+        # Widgets for the setting of Temperature: checkbox to enable entry of value
         tk.Label(frameLU, text= "Temperature (K) :").grid(sticky= tk.E, row = 7, column = 1, pady = 5, padx = 10)
         self.tempEnt = EntryFocusOut(frameLU, width=25, interface=self)
-        self.tempEnt.grid(row= 7, column = 2, padx = 5, pady = 10, columnspan=2)
+        self.tempEnt.grid(row= 7, column =2, padx = 5, pady=10, columnspan=2)
+        # disable the entry of a pressure value is the checkbox is unchecked
+
+        self.checkTemp_var = tk.IntVar(value = 1)
+        tk.Checkbutton(frameLU, text= "impose equilibrium temperature", state='active', variable=self.checkTemp_var, command=lambda : self.activateCheck(self.checkTemp_var, self.tempEnt)).grid(sticky= tk.W, row = 7, column=0, pady = 5, padx = 10)
+
 
         # Widgets for the setting of Pressure: checkbox to enable entry of value
-        tk.Label(frameLU, text= "Pressure (bar) :").grid(sticky= tk.E, row = 8, column = 1, pady = 5, padx = 10)
+        tk.Label(frameLU, text= "Pressure (Pa) :").grid(sticky= tk.E, row = 8, column = 1, pady = 5, padx = 10)
         self.presEnt = EntryFocusOut(frameLU, width=25, state='disabled', interface=self)
         self.presEnt.grid(row= 8, column =2, padx = 5, pady=5, columnspan=2)
         # disable the entry of a pressure value is the checkbox is unchecked
@@ -295,20 +320,20 @@ class Hydrate_interface:
         self.frameR = tk.LabelFrame(self.root, relief=tk.GROOVE, bd = 2, text='Results')
         self.frameR.pack(side=tk.RIGHT, pady = 10)
 
-        frameRU = tk.Frame(self.frameR, relief=tk.FLAT, bd = 2)
-        frameRU.pack(side=tk.TOP, pady = 10)
-        frameRUTree = tk.Frame(frameRU, relief=tk.FLAT, bd = 2)
-        frameRUTree.pack(side='top', pady = 10)
+        # frameRU = tk.Frame(self.frameR, relief=tk.FLAT, bd = 2)
+        # frameRU.pack(side=tk.TOP, pady = 5)
+        frameRUTree = tk.Frame(self.frameR, relief=tk.FLAT, bd = 2)
+        frameRUTree.pack(side='top', pady = 5)
 
         # self.column_names = ['ymol2', 'ymol3', 'temp', 'pres', 'struct', 'tocc_tot', 'toccS_tot', 'toccS1', 'toccS2', 'toccS3', 'toccL_tot' , 'toccL1', 'toccL2', 'toccL3']
         self.column_names = Hydrate_interface.column_names_ini.copy()
         self.column_names_main = Hydrate_interface.column_names_main_ini.copy()
         # self.resultsTree = ttk.Treeview(frameRUTree, height=10, columns= self.column_names_all[0], displaycolumns=self.column_names_main)
-        self.resultsTree = ttk.Treeview(frameRUTree, height=10, columns= self.column_names_all[0], displaycolumns=self.column_names)
+        self.resultsTree = ttk.Treeview(frameRUTree,height=6, columns= self.column_names_all[0], displaycolumns=self.column_names)
 
         self.resultsTree.heading("#0", text = "y")
         self.resultsTree.heading("temp", text = "T (K)")
-        self.resultsTree.heading("pres", text = "Peq (bar)")
+        self.resultsTree.heading("pres", text = "Peq (Pa)")
         self.resultsTree.heading("struct", text = "Structure")
         self.resultsTree.heading("compo0", text = "x_H")
         self.resultsTree.heading("tocc_tot", text = "Total Occ")
@@ -329,7 +354,13 @@ class Hydrate_interface:
         scrollbarx.pack(side='bottom', fill = "x")
         scrollbary.pack(side='right', fill = "y")
         self.resultsTree.configure(xscrollcommand=scrollbarx.set, yscrollcommand=scrollbary.set)
-        self.resultsTree.pack(padx = 10)
+        self.resultsTree.pack(padx = 5)
+
+        self.importBut = ButtonEnter(frameRUTree, text = "Import table", command = lambda : self.importTree(self.resultsTree, RESULTS_FILENAME), width = 10)
+        self.importBut.pack(side='bottom', pady = 5)
+
+        # myscrollbar= tk.Scrollbar(self.frameR, orient="vertical")
+        # myscrollbar.pack(side="right",fill="y")
 
         # self.detailsBut = ButtonEnter(frameRU, text = "Show details", command = lambda : self.showDetails(self.resultsTree, buttonShow=self.detailsBut, buttonHide=self.hideDetailsBut), width = 10)
         # self.detailsBut.pack(side='bottom', pady = 5)
@@ -365,6 +396,14 @@ class Hydrate_interface:
             widget.focus()
         elif var.get() == 0:        # unchecked
             widget.config(state='disabled')
+            # at least one of Pressure or Temperature has to be entered
+            if widget == self.tempEnt and self.checkPres_var.get() == 0:
+                self.checkPres_var.set(1)
+                self.activateCheck(self.checkPres_var, self.presEnt)
+            elif widget == self.presEnt and self.checkTemp_var.get() == 0:
+                self.checkTemp_var.set(1)
+                self.activateCheck(self.checkTemp_var, self.tempEnt)
+
 
 
     def run(self):
@@ -376,8 +415,12 @@ class Hydrate_interface:
             return
 
         # if no temperature has been set, returns error
-        if self.results['Temperature'] < 0:
-            messagebox.showerror(title='Error', message = 'Please set the temperature')
+        if (self.results['Temperature'] < 0 and self.results['Pressure'] < 0
+            or self.results['Temperature'] < 0 and self.checkPres_var.get() == 0
+            or self.checkTemp_var.get() == 0 and self.results['Pressure'] < 0
+            or self.checkTemp_var.get() == 0 and self.checkPres_var.get() == 0
+        ):
+            messagebox.showerror(title='Error', message = 'Please set the temperature or the pressure')
             return
 
         # if the sum of all mole fractions of the gas isn't 1, returns error
@@ -391,22 +434,48 @@ class Hydrate_interface:
         self.column_names = Hydrate_interface.column_names_ini.copy()
         self.column_names_main = Hydrate_interface.column_names_main_ini.copy()
         # TODO once done replace it with the entered / calculated value
+        Tiscalculated = False
+        Piscalculated = False
+        Striscalculated = False
+        if self.checkTemp_var.get() == 0 or self.results['Temperature'] < 0:
+            # TODO calculate the temperature with the algorithm
+            self.results['Temperature'] = 'calcTemp'
+            Tiscalculated = True
+            pass
         if self.checkPres_var.get() == 0 or self.results['Pressure'] < 0:
             # TODO calculate the pressure with the algorithm
             self.results['Pressure'] = 'calcPeq'
+            Piscalculated = True
             pass
         if self.checkStruct_var.get() == 0 or self.results['Structure'] == '':
             # TODO determine which structure with the algorithm
             self.results['Structure'] = 'calcStr'
+            Striscalculated = True
             pass
         # complete the rest of results with the calculated compositions and thetas
         # TODO
 
+        treeTemp = self.resultsTree
         # if the new number of gas components is different from the previous one, the tree needs to be reset first
+        # if len(self.tree.get_children()) != len(self.results['Components']):
         if len(self.tree.get_children()) != len(self.results['Components']) and len(self.resultsTree.get_children()) != 0:
-            self.reset()
+            # self.reset()
+            print('hephep')
+            treeTemp = self.makeNewResultsTree(self.frameR)
 
-        #   TODO if the new gas components are not the same as previously, the tree needs to be reset first
+        # if the new gas components are not the same as previously, the tree needs to be reset first
+        elif len(self.resultsTree.get_children()) != 0:
+            for item in self.tree.get_children():
+                if self.tree.item(item)['text'] not in self.results['Components']:
+                    # self.reset()
+                    print('here')
+                    treeTemp = self.makeNewResultsTree(self.frameR)
+
+                # TODO if it's the same components, but not the same order, change the order that is going to be entered (to match the previous row)
+                # if it's the same components and same order, refer to method update()
+                # cf notebook for change in run / update
+                    # self.update()
+                    # return
 
         # reset the values depending on components selection
         self.results['Components'] = []
@@ -424,6 +493,9 @@ class Hydrate_interface:
 
         j = 0
         for item in self.tree.get_children():
+            # j = str(item[-1]) - 1
+            # item == 'I002'
+            # item[-1] == 2
 
             name = self.tree.item(item)['text']
             # print(self.tree.item(item)['values'][0])
@@ -442,13 +514,13 @@ class Hydrate_interface:
                 self.column_names.insert(j-1, f'y{j}')
                 self.column_names_main.insert(j-1, f'y{j}')
                 values_item.insert(j-1, self.results['Composition'][j])
-                print(j-1, self.results['Composition'][j], values_item)
+                # print(j-1, self.results['Composition'][j], values_item)
 
                 self.column_names.insert(-3, f'compo{j}')
                 self.column_names_main.insert(-1, f'compo{j}')
 
             values_item.append(f'compo{j}')
-            print(values_item)
+            # print(values_item)
             values_tocc[j].append(name)
             values_tocc[j].append(self.results['Thetas'][j][0])
             values_tocc[j].append(self.results['Thetas'][j][1])
@@ -461,7 +533,7 @@ class Hydrate_interface:
                 values_item.append('')
 
         # for j in range(len(self.tree.get_children())):
-        print(values_item)
+        # print(values_item)
 
         # TODO gives the values of the calculated values
         # tocc tot
@@ -471,7 +543,7 @@ class Hydrate_interface:
         # tocc large tot
         values_item.append('calcTotal Large')
         # print(values_item)
-        print(values_item)
+        # print(values_item)
 
         # add the new composition columns to the list of all existing columns
         l = int(self.column_names_all[1])
@@ -479,57 +551,67 @@ class Hydrate_interface:
             if col not in self.column_names_all[0]:
                 if re.match('y\d', col):
                 # TODO si du format 'yj' alors au debut, si du format 'compoj' alors en -3
-                    print(col)
+                    # print(col)
                     self.column_names_all[0].insert(l - 1, col)
                     l+=1
                 elif re.match('compo\d', col):
                     self.column_names_all[0].insert(-3, col)
         self.column_names_all[1] = 1 + ( len(self.column_names_all[0]) - 7) / 2
-        print(self.column_names_all)
+        # print(self.column_names_all)
 
+        # if not the same components
+        # treeTemp = self.makeNewResultsTree(self.frameR)
+        # if same components
+        # treeTemp = self.resultsTree
 
         # print("all columns :", self.column_names_all, "values :", values_item, self.results, sep = "\n")
-        self.resultsTree.configure(columns=self.column_names_all[0])
+        treeTemp.configure(columns=self.column_names_all[0])
 
         for j in range(len(self.tree.get_children())):
             name = self.results['Components'][j]
             if j == 0:
-                self.resultsTree.heading('#0', text = f'y ({name})')
-                self.resultsTree.column('#0', width = 75)
+                treeTemp.heading('#0', text = f'y ({name})')
+                treeTemp.column('#0', width = 75)
             else:
-                self.resultsTree.heading(f'y{j}', text = f'y ({name})')
-                self.resultsTree.column(f'y{j}', width = 75)
-            self.resultsTree.heading(f'compo{j}', text = f'x_H ({name})')
-            self.resultsTree.column(f'compo{j}', width = 75)
+                treeTemp.heading(f'y{j}', text = f'y ({name})')
+                treeTemp.column(f'y{j}', width = 75)
+            treeTemp.heading(f'compo{j}', text = f'x_H ({name})')
+            treeTemp.column(f'compo{j}', width = 75)
 
-        self.resultsTree.heading("temp", text = "T (K)")
-        self.resultsTree.heading("pres", text = "Peq (bar)")
-        self.resultsTree.heading("struct", text = "Structure")
-        self.resultsTree.heading("tocc_tot", text = "Total Occ")
-        self.resultsTree.heading("toccS_tot", text = "Occ Small")
-        self.resultsTree.heading("toccL_tot", text = "Occ Large")
-        self.resultsTree.column("temp", width = 35)
-        self.resultsTree.column("pres", width = 75)
-        self.resultsTree.column("struct", width = 60)
-        self.resultsTree.column("tocc_tot", width = 75)
-        self.resultsTree.column("toccS_tot", width = 75)
-        self.resultsTree.column("toccL_tot", width = 75)
+        treeTemp.heading("temp", text = "T (K)")
+        treeTemp.heading("pres", text = "Peq (Pa)")
+        treeTemp.heading("struct", text = "Structure")
+        treeTemp.heading("tocc_tot", text = "Total Occ")
+        treeTemp.heading("toccS_tot", text = "Occ Small")
+        treeTemp.heading("toccL_tot", text = "Occ Large")
+        treeTemp.column("temp", width = 35)
+        treeTemp.column("pres", width = 75)
+        treeTemp.column("struct", width = 60)
+        treeTemp.column("tocc_tot", width = 75)
+        treeTemp.column("toccS_tot", width = 75)
+        treeTemp.column("toccL_tot", width = 75)
 
         # if self.detailsareShown == False:
         #     self.resultsTree.configure(displaycolumns=self.column_names_main)
         # if self.detailsareShown == True:
         #     self.resultsTree.configure(displaycolumns=self.column_names)
-        self.resultsTree.configure(displaycolumns=self.column_names)
+        treeTemp.configure(displaycolumns=self.column_names)
 
         # print(values_item)
-        self.resultsTree.insert(parent = "", index= tk.END, iid=f'{len(self.resultsTree.get_children())}', text = self.results['Composition'][0], values= values_item)
+        treeTemp.insert(parent = "", index= tk.END, iid=f'{len(treeTemp.get_children())}', text = self.results['Composition'][0], values= values_item)
         for j in range(len(self.tree.get_children())):
-            self.resultsTree.insert(parent = f'{len(self.resultsTree.get_children())-1}', index= tk.END, text = '', values= values_tocc[j])
+            treeTemp.insert(parent = f'{len(treeTemp.get_children())-1}', index= tk.END, text = '', values= values_tocc[j])
 
-
+        # reset data that were calculated, not given
+        if Tiscalculated:
+            self.results['Temperature'] = -1
+        if Piscalculated:
+            self.results['Pressure'] = -1
+        if Striscalculated:
+            self.results['Structure'] = ''
 
         # isEmpty = False
-        # if self.resultsTree.item('#O')['text'] == 'x':
+        # if treeTemp.item('#O')['text'] == 'x':
         #     isEmpty = True
 
         # TODO write an override method for run in the algo with interface
@@ -542,6 +624,7 @@ class Hydrate_interface:
                 # just add a row underneath
             # no:
                 # create a whole new tree
+
 
     def update(self):
         # TODO this is like run but if the molecules remain the same: only a row is added with the new values
@@ -561,11 +644,11 @@ class Hydrate_interface:
             self.column_names_main = Hydrate_interface.column_names_main_ini.copy()
 
             self.resultsTree.configure(columns= self.column_names_all[0])
-            print(self.column_names_all[0])
+            # print(self.column_names_all[0])
 
             self.resultsTree.heading("#0", text = "y")
             self.resultsTree.heading("temp", text = "T (K)")
-            self.resultsTree.heading("pres", text = "Peq (bar)")
+            self.resultsTree.heading("pres", text = "Peq (Pa)")
             self.resultsTree.heading("struct", text = "Structure")
             self.resultsTree.heading("compo0", text = "x_H")
             self.resultsTree.heading("tocc_tot", text = "Total Occ")
@@ -587,44 +670,45 @@ class Hydrate_interface:
             # if self.detailsareShown == True:
             #     self.hideDetails(widget=self.resultsTree, buttonShow=self.detailsBut, buttonHide=self.hideDetailsBut)
 
-    # def makeNewResultsTree(self, master) -> ttk.Treeview:
-    #     # creates a new results tree with the columns in argument
-    #     # does not do the configuration for the headings etc though, which is done is run or reset
-    #     # return the new tree
-    #     frameRD = tk.Frame(master, relief=tk.FLAT, bd = 2)
-    #     frameRD.pack(side=tk.BOTTOM, pady = 10)
-    #     frameRDTree = tk.Frame(frameRD, relief=tk.FLAT, bd = 2)
-    #     frameRDTree.grid(row = 0, pady = 10)
-    #     resultsTreeTemp = ttk.Treeview(frameRDTree, height=10, columns= self.column_names)
+    def makeNewResultsTree(self, master) -> ttk.Treeview:
+        # returns the new tree
+        frameRDTree = tk.Frame(master, relief=tk.FLAT, bd = 2)
+        frameRDTree.pack(side='top', pady = 5)
 
-    #     scrollbarx = ttk.Scrollbar(frameRDTree, orient = "horizontal", command=resultsTreeTemp.xview)
-    #     scrollbary = ttk.Scrollbar(frameRDTree, orient = "vertical", command=resultsTreeTemp.yview)
-    #     scrollbarx.pack(side='bottom', fill = "x")
-    #     scrollbary.pack(side='right', fill = "y")
-    #     resultsTreeTemp.configure(xscrollcommand=scrollbarx.set, yscrollcommand=scrollbary.set)
-    #     resultsTreeTemp.pack(padx = 10, side=tk.BOTTOM)
+        resultsTreeTemp = ttk.Treeview(frameRDTree,height=6, columns= self.column_names_all[0], displaycolumns=self.column_names)
 
-    #     self.detailsButTemp = ButtonEnter(frameRD, text = "Show details", command = lambda : self.showDetails(resultsTreeTemp, buttonShow=self.detailsButTemp, buttonHide=self.hideDetailsButTemp), width = 10)
-    #     self.detailsButTemp.grid(row = 1, pady=5)
-    #     self.hideDetailsButTemp = ButtonEnter(frameRD, text = "Hide details", command = lambda : self.hideDetails(resultsTreeTemp, buttonShow=self.detailsButTemp, buttonHide=self.hideDetailsButTemp), width = 10)
+        scrollbarxTemp = ttk.Scrollbar(frameRDTree, orient = "horizontal", command=resultsTreeTemp.xview)
+        scrollbaryTemp = ttk.Scrollbar(frameRDTree, orient = "vertical", command=resultsTreeTemp.yview)
+        scrollbarxTemp.pack(side='bottom', fill = "x")
+        scrollbaryTemp.pack(side='right', fill = "y")
+        resultsTreeTemp.configure(xscrollcommand=scrollbarxTemp.set, yscrollcommand=scrollbaryTemp.set)
+        resultsTreeTemp.pack(padx = 2)
 
-    #     return resultsTreeTemp
+        self.importButTemp = ButtonEnter(frameRDTree, text = "Import table", command = lambda : self.importTree(resultsTreeTemp, RESULTS_FILENAME), width = 10)
+        self.importButTemp.pack(side='bottom', pady = 5)
+
+        return resultsTreeTemp
+
+    def importTree(self, tree, filename):
+        print(f'tree imported in {filename}')
+        pass
 
     # def hideDetails(self, widget: ttk.Treeview, buttonShow: tk.Button, buttonHide: tk.Button):
-    #     widget.configure(displaycolumns=self.column_names_main)
-    #     buttonHide.pack_forget()
-    #     buttonShow.pack(side='bottom', pady = 5)
-    #     self.detailsareShown = False
+        # widget.configure(displaycolumns=self.column_names_main)
+        # buttonHide.pack_forget()
+        # buttonShow.pack(side='bottom', pady = 5)
+        # self.detailsareShown = False
 
     # def showDetails(self, widget: ttk.Treeview, buttonShow: tk.Button, buttonHide: tk.Button):
-    #     widget.configure( displaycolumns=self.column_names)
-    #     buttonShow.pack_forget()
-    #     self.detailsareShown = True
-    #     buttonHide.pack(side='bottom', pady = 5)
+        # widget.configure( displaycolumns=self.column_names)
+        # buttonShow.pack_forget()
+        # self.detailsareShown = True
+        # buttonHide.pack(side='bottom', pady = 5)
 
 # Example, TODO change to actual file names once they are created
 COMPONENTS_FILENAME = 'components.txt'
 STRUCTURES_FILENAME = 'structures.txt'
+RESULTS_FILENAME = 'results.txt'
 
 ### TEST ###
 
