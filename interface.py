@@ -4,6 +4,7 @@ import tkinter as tk
 from tkinter import ttk, messagebox
 from os.path import isfile
 import re
+from tabulate import tabulate
 
 # class FrameFocus(tk.LabelFrame):
 #     def __init__(self, master, **kw):
@@ -189,7 +190,7 @@ class Hydrate_interface:
         """Main window initialization"""
         self.componentsList = componentsList
         self.structuresList = structuresList
-        self.results = {'Components' : [], 'Composition' : [], 'Temperature' : -1, 'Pressure' : -1, 'Structure' : '', 'Thetas' : []}
+        self.results = {'Components' : [], 'Composition' : [], 'Temperature' : -1, 'Pressure' : -1, 'Structure' : '', 'Thetas' : [], 'Hydrate Composition' : []}
         self.detailsareShown = False
         self.column_names_all = [['temp', 'pres', 'struct', 'compo0', 'tocc_tot', 'toccS_tot', 'toccL_tot'], 1]
         # self.componentsList = []
@@ -689,8 +690,28 @@ class Hydrate_interface:
 
         return resultsTreeTemp
 
-    def importTree(self, tree, filename):
-        print(f'tree imported in {filename}')
+    def importTree(self, tree: ttk.Treeview, filename):
+        head = ['y0'] + self.column_names
+        print(head)
+        # print(head)
+        # table = tabulate( [[tree.item(item).get('text')] + tree.item(item).get('values') for item in tree.get_children()], headers= ['x'] + self.column_names_all[0])
+        # print(tabulate( [tree.item(item).get('values') for item in tree.get_children()], tree.column(1).get('') ))
+        # print(f'tree imported in {filename}')
+        table1 = []
+        for child in tree.get_children():
+            table1 += ([[tree.item(child).get('text')] + tree.item(child).get('values')]
+                    + [[tree.item(sub_child).get('text')] + tree.item(sub_child).get('values') for sub_child in tree.get_children(child)] )
+        print(table1)
+        n = len(tree.get_children(tree.get_children()[0])) + 1
+        for i in range(int(len(table1)/n)):
+            table1[n*i] = [item for item in table1[n*i] if item != '']
+        print(table1)
+        table = tabulate( table1,
+                          headers= head)
+        print(table1, table, sep='\n')
+        with open(filename, 'a') as f:
+            f.write('\n' * 3)
+            f.write(table)
         pass
 
     # def hideDetails(self, widget: ttk.Treeview, buttonShow: tk.Button, buttonHide: tk.Button):
@@ -708,7 +729,7 @@ class Hydrate_interface:
 # Example, TODO change to actual file names once they are created
 COMPONENTS_FILENAME = 'components.txt'
 STRUCTURES_FILENAME = 'structures.txt'
-RESULTS_FILENAME = 'results.txt'
+RESULTS_FILENAME = 'results.csv'
 
 ### TEST ###
 
