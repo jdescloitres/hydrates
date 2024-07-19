@@ -1,19 +1,21 @@
 # Hydrate Composition Calculation Algorithm without Interface
 
 # import math, scipy
-from scipy.integrate import quad
+# from scipy.integrate import quad
+from scipy import integrate
 from math import exp, pi, log, sqrt, cos
 import numpy as np
+import sympy as sy
 from scipy.special import cbrt
 
 ### Definition of constants
 
-K_BOLTZMANN = 1.38 * 10**(-23)
+K_BOLTZMANN = 1.38E-23
 R_IDEAL_GAS = 8.314
 T_ZERO = 273.15
 P_ZERO = 0
 
-MAX_DIFFERENCE = 10E-5
+MAX_DIFFERENCE = 1E-5
 
 # Inside structure dictionary
 KEY_FOR_MU0 = 'deltaMu0'
@@ -30,7 +32,7 @@ INDEX_FOR_Z = 2             # index pointing to z (coordination number) in the c
 
 # Inside component dictionnary in components list (components is a list of dictionnaries)
 KEY_FOR_ID = 'id'
-KEY_FOR_EPSILON = 'epsilon'     # key pointing to epsilon in the component info table
+KEY_FOR_EPSILON_OVER_K = 'epsilon_k'     # key pointing to epsilon in the component info table
 KEY_FOR_SIGMA = 'sigma'         # key pointing to sigma in the component info table
 KEY_FOR_A = 'a'                 # key pointing to a in the component info table
 KEY_FOR_VINF = 'Vinf'
@@ -44,17 +46,6 @@ KEY_FOR_PC = 'Pc'
 # Note: for greater readibility, indexes will be used as follows:
 # i for cavity types
 # j for components
-
-### Initialization
-
-## File imports
-
-
-## Determination of the physical values
-
-#
-
-
 
 ### Equilibrium condition: solving deltaMu_L = deltaMu_H
 
@@ -70,7 +61,7 @@ def deltah_L(Temp, structure: dict):
     # definition of deltaCp
     def deltaCp(T):
         return deltaCp0 + b*(T - T_ZERO)
-    integral = quad(deltaCp, T_ZERO, Temp)[0]
+    integral = integrate.quad(deltaCp, T_ZERO, Temp)[0]
 
     return deltaH0 + integral
 
@@ -91,23 +82,24 @@ def a_w(T, P, components: list, coefficients: list):
 
 # Injecting in deltaMu_L
 
-def deltaMu_L(T, P , structure: dict, components: list, coefficients: list):
+def deltaMu_L(T ,P, structure: dict, components: list, coefficients: list):
     deltaMu0 = structure[KEY_FOR_MU0]
     deltah = deltah_L(T, structure)
     deltaV0 = structure[KEY_FOR_V0]
-    aw = a_w(T, P, components, coefficients)
+    # aw = a_w(T, P, components, coefficients)
 
     termMu = T * deltaMu0 / T_ZERO
 
     def integrandH(Temp):
         return deltah / (Temp**2)
-    termH = T * quad(integrandH, T_ZERO, T)[0]
+    termH = T * integrate.quad(integrandH, T_ZERO, T)[0]
 
     termV = deltaV0 * (P - P_ZERO)
 
-    termAw = R_IDEAL_GAS * T * log(aw)
+    # termAw = R_IDEAL_GAS * T * log(aw)
 
-    return termMu - termH + termV - termAw
+    # return termMu - termH + termV - termAw
+    return termMu - termH + termV
 
 
 ## Calculation of deltaMu_H using statistical thermodynamics
@@ -119,7 +111,7 @@ def langmuir_ij(T, structure_cavities: list, components: list, i: int, j: int) -
     # determination of R, z, and Kihara parameters for a component j in a type i cavity
     R = structure_cavities[i][INDEX_FOR_R]
     z = structure_cavities[i][INDEX_FOR_Z]
-    epsilon = components[j][KEY_FOR_EPSILON]
+    epsilonk = components[j][KEY_FOR_EPSILON_OVER_K]
     sigma = components[j][KEY_FOR_SIGMA]
     a = components[j][KEY_FOR_A]
 
@@ -130,21 +122,29 @@ def langmuir_ij(T, structure_cavities: list, components: list, i: int, j: int) -
         def w_r(r):
             # definition of delta_N
             def delta_N(N):
+                # print('delta : ', ((1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N)
                 return ( (1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N
 
-            return ( 2 * z * epsilon
+            return ( 2 * z * epsilonk
                     * ( (sigma**12 / (r * R**11)) * (delta_N(10) + delta_N(11) * a/R )
                     -   (sigma** 6 / (r * R** 5)) * (delta_N(4) + delta_N(5) * a/R ) )
             )
+        # print('w : ', w_r(r)/ T)
+        # print('exp : ' , sy.exp( - w_r(r) / T))
+        print(sy.exp( - w_r(r) / T) * (r**2 / K_BOLTZMANN))
+        return sy.exp( - w_r(r) / T) * (r**2 / K_BOLTZMANN)
+        # TODO pb : k is 1E-23 so it makes the inside of exp really big
 
-        # print('w : ', w_r(r))
-        return np.exp( - w_r(r) / (K_BOLTZMANN * T)) * r**2
-    integral = quad(integrand, 0, R)[0]
-    # print('0.1 :', integrand(0.1), 'R :', integrand(1), R)
+    r = sy.Symbol("r")
+    print('encore bloque ici')
+    integral = sy.integrate(integrand(r), (r, 0, R))
+    # integral = integrate.quad(integrand, 0, R)[0]
+    # print('0.1 :', integrand(1E-30), 'R :', integrand(R *1E-30), R)
+    print('arrive ici')
 
-    # print(integral)
-    return 4 * pi * 1  / (K_BOLTZMANN * T)
-    # return 4 * pi * integral  / (K_BOLTZMANN * T)
+    print('int : ' , integral)
+    # return 4 * pi * 1  / (K_BOLTZMANN * T)
+    return 4 * pi * integrate.quad(integrand, 0, R)[0]  / T
 
 # a_m
 
@@ -229,7 +229,7 @@ def lnphi_j(T, Pres, components: list, coefficients: list, j: int):
 
     # print(Zj, B, B/Zj)
     # print(( (bj / bm) * (Zj - 1)
-    #         - log(abs(Zj - B))
+    #         - log(Zj - B)
     #         - (A / B) * (2 * sqrt(aj/am) - bj/bm ) * log(abs(1 + B/Zj))
     # ))
     return ( (bj / bm) * (Zj - 1)
@@ -290,24 +290,24 @@ def theta_ij(T, P, structure_cavities: list, components: list, coefficients: lis
 
 ## Determination of hydrate composition xj_H
 
-def xj_H(T, P, structure_cavities: list, components: list, coefficients: list, j:int):
+# def xj_H(T, P, structure_cavities: list, components: list, coefficients: list, j:int):
 
-    sumk = 0
-    for k in range(len(components)):
-        sumi = 0
-        for i in range(len(structure_cavities)):
-            nui = structure_cavities[i][INDEX_FOR_NU]
-            thetaik = theta_ij(T, P, structure_cavities, components, coefficients, i, k)
-            sumi += nui * thetaik
-        sumk += sumi
+    # sumk = 0
+    # for k in range(len(components)):
+    #     sumi = 0
+    #     for i in range(len(structure_cavities)):
+    #         nui = structure_cavities[i][INDEX_FOR_NU]
+    #         thetaik = theta_ij(T, P, structure_cavities, components, coefficients, i, k)
+    #         sumi += nui * thetaik
+    #     sumk += sumi
 
-    sumi2 = 0
-    for i in range(len(structure_cavities)):
-        nui = structure_cavities[i][INDEX_FOR_NU]
-        thetaij = theta_ij(T, P, structure_cavities, components, coefficients, i, j)
-        sumi2 += nui * thetaij
+    # sumi2 = 0
+    # for i in range(len(structure_cavities)):
+    #     nui = structure_cavities[i][INDEX_FOR_NU]
+    #     thetaij = theta_ij(T, P, structure_cavities, components, coefficients, i, j)
+    #     sumi2 += nui * thetaij
 
-    return sumi2 / sumk
+    # return sumi2 / sumk
 
 def xj_H(structure_cavities: list, components: list, thetas: list, j:int):
 
@@ -316,14 +316,17 @@ def xj_H(structure_cavities: list, components: list, thetas: list, j:int):
         sumi = 0
         for i in range(len(structure_cavities)):
             nui = structure_cavities[i][INDEX_FOR_NU]
-            thetaik = thetas[i][k]
+            # thetaik = thetas[i][k]
+            # or ki ?
+            thetaik = thetas[k][i]
             sumi += nui * thetaik
         sumk += sumi
 
     sumi2 = 0
     for i in range(len(structure_cavities)):
         nui = structure_cavities[i][INDEX_FOR_NU]
-        thetaij = thetas[i][j]
+        # thetaij = thetas[i][j]
+        thetaij = thetas[j][i]
         sumi2 += nui * thetaij
 
     return sumi2 / sumk
@@ -346,13 +349,17 @@ def main(T, P, structure, components, coefficients, results: dict):
 
 def determineFinalValues(T, P, structure, components, coefficients):
     Peq = P
-    theta = []
-    for j in range(len(components)):
-        thetaS = theta_ij(T=T, P=P, structure_cavities=structure[KEY_FOR_CAVITIES], components=components, coefficients=coefficients, i=0, j=j)
-        thetaL = theta_ij(T=T, P=P, structure_cavities=structure[KEY_FOR_CAVITIES], components=components, coefficients=coefficients, i=1, j=j)
-        # xjH = xj_H(T, P, structure[KEY_FOR_CAVITIES], components, j)
-        theta.append((thetaS, thetaL))
-    return Peq, theta
+    # regression algo for P estimation
+    # theta = []
+    # for j in range(len(components)):
+    #     thetaS = theta_ij(T=T, P=P, structure_cavities=structure[KEY_FOR_CAVITIES], components=components, coefficients=coefficients, i=0, j=j)
+    #     thetaL = theta_ij(T=T, P=P, structure_cavities=structure[KEY_FOR_CAVITIES], components=components, coefficients=coefficients, i=1, j=j)
+    #     theta.append((thetaS, thetaL))
+    theta = [(theta_ij(T=T, P=P, structure_cavities=structure[KEY_FOR_CAVITIES], components=components, coefficients=coefficients, i=0, j=j),
+              theta_ij(T=T, P=P, structure_cavities=structure[KEY_FOR_CAVITIES], components=components, coefficients=coefficients, i=1, j=j))
+             for j in range(len(components))]
+    xH = [xj_H(structure[KEY_FOR_CAVITIES], components, theta, j) for j in range(len(components))]
+    return Peq, theta, xH
 
 ### TESTS
 
@@ -361,27 +368,36 @@ def determineFinalValues(T, P, structure, components, coefficients):
 # tab = tab0 + [tab1]
 
 
-# print(tab)
-
-T_test = 10
+T_test = 100
 P_test = 0.1
 y0_test = 0.4
 y1_test = 0.6
 results_test = {'Components' : [], 'Composition' : [], 'Temperature' : -1, 'Pressure' : -1, 'Structure' : '', 'Thetas' : []}
-cavities_test = [[None] * 3] * 2
+cavities_test = [[None for i in range(3)] for j in range(2)]
 cavities_test[0][INDEX_FOR_NU] = 2
 cavities_test[1][INDEX_FOR_NU] = 8
-cavities_test[0][INDEX_FOR_R] = 391
-cavities_test[1][INDEX_FOR_R] = 433
+cavities_test[0][INDEX_FOR_R] = 3.91E-10
+cavities_test[1][INDEX_FOR_R] = 4.33E-10
 cavities_test[0][INDEX_FOR_Z] = 20
 cavities_test[1][INDEX_FOR_Z] = 24
+print(cavities_test)
 structure_test = {KEY_FOR_MU0 : 1299, KEY_FOR_H0 : 1861, KEY_FOR_CP0 : -38.12, KEY_FOR_B : 0.141, KEY_FOR_V0 : 3, KEY_FOR_CAVITIES : cavities_test}
-components_test = [{KEY_FOR_ID : 0, KEY_FOR_EPSILON : 154.54 * K_BOLTZMANN, KEY_FOR_SIGMA : 3.165, KEY_FOR_A : 0.3834, KEY_FOR_VINF : 32, KEY_FOR_K1 : 15.826277, KEY_FOR_K2 : -1559.0631, KEY_FOR_Y : y0_test, KEY_FOR_OMEGA : 0.0115, KEY_FOR_TC : 190.56, KEY_FOR_PC : 4.599},
-                   {KEY_FOR_ID : 1, KEY_FOR_EPSILON : 168.77 * K_BOLTZMANN, KEY_FOR_SIGMA : 2.9818, KEY_FOR_A : 0.6805, KEY_FOR_VINF : 32, KEY_FOR_K1 : 14.283146, KEY_FOR_K2 : -2050.3269, KEY_FOR_Y : y1_test, KEY_FOR_OMEGA : 0.2276, KEY_FOR_TC : 304.19, KEY_FOR_PC : 7.342}
+# components_test = [{KEY_FOR_ID : 0, KEY_FOR_EPSILON_OVER_K : 154.54, KEY_FOR_SIGMA : 3.165, KEY_FOR_A : 0.3834, KEY_FOR_VINF : 32, KEY_FOR_K1 : 15.826277, KEY_FOR_K2 : -1559.0631, KEY_FOR_Y : y0_test, KEY_FOR_OMEGA : 0.0115, KEY_FOR_TC : 190.56, KEY_FOR_PC : 4.599},
+#                    {KEY_FOR_ID : 1, KEY_FOR_EPSILON_OVER_K : 168.77, KEY_FOR_SIGMA : 2.9818, KEY_FOR_A : 0.6805, KEY_FOR_VINF : 32, KEY_FOR_K1 : 14.283146, KEY_FOR_K2 : -2050.3269, KEY_FOR_Y : y1_test, KEY_FOR_OMEGA : 0.2276, KEY_FOR_TC : 304.19, KEY_FOR_PC : 7.342}
+#             ]
+components_test = [{KEY_FOR_ID : 0, KEY_FOR_EPSILON_OVER_K : 154.54, KEY_FOR_SIGMA : 3.165, KEY_FOR_A : 0.3834, KEY_FOR_VINF : 32, KEY_FOR_K1 : 15.826277, KEY_FOR_K2 : -1559.0631, KEY_FOR_Y : y0_test, KEY_FOR_OMEGA : 0.0115, KEY_FOR_TC : 190.56, KEY_FOR_PC : 4.599},
             ]
 coefficients_test = [[0,0.1107], [0.1107, 0]]
 
-main(T=T_test, P=P_test, structure=structure_test, components=components_test, coefficients=coefficients_test, results=results_test)
-print(results_test)
+# print(components_test)
+# print(structure_test)
+# main(T=T_test, P=P_test, structure=structure_test, components=components_test, coefficients=coefficients_test, results=results_test)
+# print(results_test)
 
-# langmuir_ij(T_test, structure_test[KEY_FOR_CAVITIES], components_test, 0, 0)
+# print('langmuir : ', langmuir_ij(T_test, structure_test[KEY_FOR_CAVITIES], components_test, 0, 0))
+
+# print(deltaMu_L(T_test, P_test, structure_test, components_test, coefficients_test))
+
+# R en metres
+# k en m kg s K
+# P et fugacite en Pa
