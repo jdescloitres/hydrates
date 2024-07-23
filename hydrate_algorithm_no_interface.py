@@ -7,7 +7,11 @@ from math import exp, pi, log, sqrt, cos
 import numpy as np
 import sympy as sy
 from scipy.special import cbrt
-import hydrate_algorithm_with_interface as hydinter
+from scipy.optimize import newton, curve_fit
+from scipy.interpolate import interp1d
+
+# import hydrate_algorithm_with_interface as hydinter
+
 
 ### Definition of constants
 
@@ -54,7 +58,7 @@ MAX_DIFFERENCE = 1E-5
 
 # deltah
 
-def deltah_L(Temp : float, structure: hydinter.Structure):
+def deltah_L(Temp : float, structure):
     deltaH0 = structure.deltaH0
     deltaCp0 = structure.deltaCp0
     b =  structure.b
@@ -68,7 +72,7 @@ def deltah_L(Temp : float, structure: hydinter.Structure):
 
 # non ideality term ln(a_w)
 
-def a_w(T : float, P : float, components: list[hydinter.Component], coefficients: list):
+def a_w(T : float, P : float, components, coefficients: list):
     sumj = 0
     for component_key in components:
         component = components[component_key]
@@ -84,7 +88,7 @@ def a_w(T : float, P : float, components: list[hydinter.Component], coefficients
 
 # Injecting in deltaMu_L
 
-def deltaMu_L(T : float ,P : float, structure: hydinter.Structure, components: list[hydinter.Component], coefficients: list):
+def deltaMu_L(T : float ,P : float, structure, components, coefficients: list):
     deltaMu0 = structure.deltaMu0
     deltah = deltah_L(T, structure)
     deltaV0 = structure.deltaV0
@@ -108,7 +112,7 @@ def deltaMu_L(T : float ,P : float, structure: hydinter.Structure, components: l
 
 # Cij: Langmuir constant for component j in cavity i
 
-def langmuir_ij(T : float, structure_cavities: list[hydinter.Cavity], components: dict[str, hydinter.Component], i: int, component_keyj) -> float:
+def langmuir_ij(T : float, structure_cavities, components, i: int, component_keyj) -> float:
 
     # determination of R, z, and Kihara parameters for a component j in a type i cavity
     R = structure_cavities[i].r
@@ -150,7 +154,7 @@ def langmuir_ij(T : float, structure_cavities: list[hydinter.Cavity], components
 
 # a_m
 
-def a_j(T : float, components: dict[str, hydinter.Component], component_keyj):
+def a_j(T : float, components, component_keyj):
     Pc = components[component_keyj].pc
     Tc = components[component_keyj].tc
     omegaj = components[component_keyj].omega
@@ -158,7 +162,7 @@ def a_j(T : float, components: dict[str, hydinter.Component], component_keyj):
     alphaj = ( 1 + m * (1- sqrt(T/Tc)) ) ** 2
     return 0.42747 * (R_IDEAL_GAS**2) * (Tc**2) * sqrt(T) * alphaj / Pc
 
-def a_jk(T : float, components: dict[str, hydinter.Component], coefficients: list, component_keyj, component_keyk):
+def a_jk(T : float, components, coefficients: list, component_keyj, component_keyk):
     aj = a_j(T, components, component_keyj)
     ak = a_j(T, components, component_keyk)
     idj = components[component_keyj].id
@@ -166,7 +170,7 @@ def a_jk(T : float, components: dict[str, hydinter.Component], coefficients: lis
     kjk = coefficients[idj][idk]
     return sqrt(aj * ak) * (1 - kjk)
 
-def a_m(T : float, components: dict[str, hydinter.Component], coefficients: list[list]):
+def a_m(T : float, components, coefficients: list[list]):
     sumj = 0
     for component_keyj in components:
         yj = components[component_keyj].y
@@ -180,12 +184,12 @@ def a_m(T : float, components: dict[str, hydinter.Component], coefficients: list
 
 # b_m
 
-def b_j(components: dict[str, hydinter.Component], component_keyj):
+def b_j(components, component_keyj):
     Tc = components[component_keyj].tc
     Pc = components[component_keyj].pc
     return 0.0866 * R_IDEAL_GAS * Tc / Pc
 
-def b_m(components: dict[str, hydinter.Component]):
+def b_m(components):
     sumj = 0
     for component_key in components:
         yj = components[component_key].y
@@ -195,7 +199,7 @@ def b_m(components: dict[str, hydinter.Component]):
 
 # phij
 
-def lnphi_j(T : float, Pres : float, components: dict[str, hydinter.Component], coefficients: list[list], component_keyj):
+def lnphi_j(T : float, Pres : float, components, coefficients: list[list], component_keyj):
     bj = b_j(components, component_keyj)
     bm = b_m(components)
     aj = a_j(T, components, component_keyj)
@@ -251,7 +255,7 @@ def fugacity_j(T : float, P : float, components: list, coefficients : list[list]
 
 # Injecting in deltaMu_H
 
-def deltaMu_H(T, P, structure_cavities: list[hydinter.Cavity], components: dict[str, hydinter.Component], coefficients: list[list]):
+def deltaMu_H(T, P, structure_cavities, components, coefficients: list[list]):
     sumi = 0
     for i in range(len(structure_cavities)):
         sumj = 0
@@ -270,22 +274,85 @@ def deltaMu_H(T, P, structure_cavities: list[hydinter.Cavity], components: dict[
 
 # thetaij
 
-def theta_ij(T : float, P : float, structure_cavities: list[hydinter.Cavity], components: dict[str, hydinter.Component], coefficients: list[list], i: int, component_keyj) -> float:
-    sumtheta = 0
-    for component_keyk in components:
-        cik = langmuir_ij(T, structure_cavities, components, i, component_keyk)
-        fk = fugacity_j(T, P, components, coefficients, component_keyk)
-        sumtheta += cik * fk
-    cij = langmuir_ij(T, structure_cavities, components, i, component_keyj)
-    fj = fugacity_j(T, P, components, coefficients, component_keyj)
+# def theta_ij(T : float, P : float, structure_cavities: list[hydinter.Cavity], components: dict[str, hydinter.Component], coefficients: list[list], i: int, component_keyj) -> float:
+#     sumtheta = 0
+#     for component_keyk in components:
+#         cik = langmuir_ij(T, structure_cavities, components, i, component_keyk)
+#         fk = fugacity_j(T, P, components, coefficients, component_keyk)
+#         sumtheta += cik * fk
+#     cij = langmuir_ij(T, structure_cavities, components, i, component_keyj)
+#     fj = fugacity_j(T, P, components, coefficients, component_keyj)
 
-    return cij * fj / (1 + sumtheta)
+#     return cij * fj / (1 + sumtheta)
+
+def theta_ij(cij : dict[str, tuple], fj : dict[str, float], structure_cavities, i : int, component_keyj) -> float:
+    sumtheta = 0
+    for component_keyk in cij:
+        sumtheta += cij[component_keyk][i] * fj[component_keyk]
+    return cij[component_keyj][i] * fj[component_keyj] / (1 + sumtheta)
+
+def thetas_iall(thetas : dict[str, tuple], components):
+    sumthetaS = 0
+    sumthetaL = 0
+    for component_key in components:
+        sumthetaS += thetas[components[component_key].name][0]
+        sumthetaL += thetas[components[component_key].name][1]
+    return sumthetaS, sumthetaL
 
 
 ## Optimisation (Kihara parameters)
 
 
+def PfromT_f(list_temp, list_pres):
+    return interp1d(x= list_temp, y= list_pres)
+def TfromP_f(list_pres, list_temp):
+    return interp1d(x= list_pres, y= list_temp)
 
+def calculatePi(Ti, Pexpi, structurei, componentsi, coefficientsi):
+    # determine le Pi qui verifie l'egalite des deltaMu
+    def f(P, T = Ti, structure = structurei, components=componentsi,coefficients= coefficientsi):
+        return deltaMu_H(T, P, structure.cavities, components, coefficients) - deltaMu_L(T, P, structure, components, coefficients)
+    P_i = newton(func= f, x0=Pexpi)
+    return (P_i, deltaMu_L(Ti, P_i, structurei, componentsi, coefficientsi))
+
+def calculateTi(Pi, Texpi, structurei, componentsi, coefficientsi):
+    # determine le Pi qui verifie l'egalite des deltaMu
+    def f(T, P = Pi, structure = structurei, components=componentsi,coefficients= coefficientsi):
+        return deltaMu_H(T, P, structure.cavities, components, coefficients) - deltaMu_L(T, P, structure, components, coefficients)
+    T_i = newton(func= f, x0=Texpi)
+    return (T_i, deltaMu_L(P = Pi, T= T_i, structure=structurei, components=componentsi, coefficients=coefficientsi))
+
+
+# (note: the optimization is done for that component as sole component of the gas)
+def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, component_pure, structure, coefficients, kw, file, n_models= 3, n_T = 10):
+    sigma, epsilon, a = file['parameters']
+
+    xy_P = []
+    for j in range(1, n_T + 1):
+        xy_P = xy_P + [(calculatePi(T1 + j*(T2 - T1)/n_T, calculate_unknownPfromT(T1 + j*(T2 - T1)/n_T), kw[i])) for i in range(n_models)]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of temp
+
+    # note: unlike deltaMu_L, deltaMu_H does not depend on the macroscopic values, so it is independent from the models that were used to get Pi
+    def f(P, eps, sig):
+        component_pure.epsilon = eps
+        component_pure.sigma = sig
+        return deltaMu_H(T=calculateTfromP(P), P=P, components={component_pure.name : component_pure}, structure_cavities=structure.cavities, coefficients=coefficients)
+
+    popt, pcov = curve_fit(f, xdata=[item[0] for item in xy_P], ydata=[item[1] for item in xy_P], p0=[sigma, epsilon])
+    return popt
+
+
+def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, component_pure, structure, coefficients, kw, file, n_models= 3, n_P = 10):
+    sigma, epsilon, a = file['parameters']
+
+    xy_T = []
+    for j in range(1, n_P + 1):
+        xy_T = xy_T + [(calculateTi(P1 + j*(P2 - P1)/n_P, calculate_unknownTfromP(P1 + j*(P2 - P1)/n_P), kw[i])) for i in range(n_models)]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of pres
+    def f(T, eps, sig):
+        component_pure.epsilon = eps
+        component_pure.sigma = sig
+        return deltaMu_H(P=calculatePfromT(T), T=T, components={component_pure.name : component_pure}, structure_cavities=structure.cavities, coefficients=coefficients)
+    popt, pcov = curve_fit(f, xdata=[item[0] for item in xy_T], ydata=[item[1] for item in xy_T], p0=[sigma, epsilon])
+    return popt
 
 ## Determination of hydrate composition xj_H
 
@@ -308,7 +375,7 @@ def theta_ij(T : float, P : float, structure_cavities: list[hydinter.Cavity], co
 
     # return sumi2 / sumk
 
-def xj_H(structure_cavities: list[hydinter.Cavity], components: dict[str, hydinter.Component], thetas: dict, component_keyj: int):      # theta = dict[tuple] or dict[list]
+def xj_H(structure_cavities, components, thetas: dict, component_keyj: int):      # theta = dict[tuple] or dict[list]
 
     sumk = 0
     for component_keyk in components:
@@ -334,7 +401,7 @@ def xj_H(structure_cavities: list[hydinter.Cavity], components: dict[str, hydint
 #### Algorithm
 
 # TODO put this main in the file with the interface
-def main(T : float, P : float, structure : hydinter.Structure, components : dict[str, hydinter.Component], coefficients : list[list], results: dict):
+def main(T : float, P : float, structure, components, coefficients : list[list], results: dict):
     deltaMuH = deltaMu_H(T, P, structure.cavities, components, coefficients)
     deltaMUL = deltaMu_L(T, P, structure, components, coefficients)
     results['Temperature'] = T
@@ -346,7 +413,7 @@ def main(T : float, P : float, structure : hydinter.Structure, components : dict
     else:
         print('no')
 
-def determineFinalValues(T : float, P: float, structure: hydinter.Structure, components : dict[str, hydinter.Component], coefficients : list[list]):
+def determineFinalValues(T : float, P: float, structure, components, coefficients : list[list]):
     Peq = P
     # regression algo for P estimation
     # theta = []
@@ -372,11 +439,11 @@ P_test = 0.1
 y0_test = 0.4
 y1_test = 0.6
 results_test = {'Components' : [], 'Composition' : [], 'Temperature' : -1, 'Pressure' : -1, 'Structure' : '', 'Thetas' : []}
-cavities_test = [hydinter.Cavity(3.91E-10, 20, 2), hydinter.Cavity(4.33E-10, 24, 8)]
-structure_test = hydinter.Structure('I', 1299, 1861, -38.12, 0.141, 3, cavities_test)
-components_test = {'CH4' : hydinter.Component('CH4', 0, y0_test, 190.56, 4.599, 154.54, 3.165, 0.3834, 32, 15.826277, -1559.0631, 0.0115),
-                   'CO2' : hydinter.Component('CO2', 1, y1_test, 304.19, 7.342, 168.77, 2.9818, 0.6805, 32, 14.283146, -2050.3269, 0.2276)
-                   }
+# cavities_test = [hydinter.Cavity(3.91E-10, 20, 2), hydinter.Cavity(4.33E-10, 24, 8)]
+# structure_test = hydinter.Structure('I', 1299, 1861, -38.12, 0.141, 3, cavities_test)
+# components_test = {'CH4' : hydinter.Component('CH4', 0, y0_test, 190.56, 4.599, 154.54, 3.165, 0.3834, 32, 15.826277, -1559.0631, 0.0115),
+#                    'CO2' : hydinter.Component('CO2', 1, y1_test, 304.19, 7.342, 168.77, 2.9818, 0.6805, 32, 14.283146, -2050.3269, 0.2276)
+#                    }
 
 # cavities_test = [[None for i in range(3)] for j in range(2)]
 # cavities_test[0][INDEX_FOR_NU] = 2
