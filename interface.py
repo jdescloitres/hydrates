@@ -1,11 +1,12 @@
 # Interface file for the hydrate algorithm
 
 import tkinter as tk
-from tkinter import ttk, messagebox
+from tkinter import ttk, messagebox, filedialog
 from os.path import isfile
 import re
 from tabulate import tabulate
-
+import os
+dir_path = os.path.dirname(os.path.realpath(__file__))
 
 class TreeviewEdit(ttk.Treeview):
     def __init__(self, master, **kw):
@@ -164,12 +165,16 @@ class Hydrate_interface_squelette:
     column_names_ini = ['temp', 'pres', 'struct', 'compo0', 'tocc_tot', 'toccS_tot', 'toccL_tot']
     column_names_main_ini = ['temp', 'pres', 'struct', 'compo0', 'tocc_tot']
 
-    def __init__(self, componentsDict: dict, structuresDict: dict) -> None:
+    def __init__(self, componentsDict: dict, structuresDict: dict, interpolPT: dict, bip : dict, all_models : dict) -> None:
     # def __init__(self, data_folder: str) -> None:
         """Main window initialization"""
         self.allComponents = componentsDict
         self.componentsList = list(componentsDict.keys())
         self.structuresDict = structuresDict
+        self.PTinterpolDict =interpolPT
+        self.bipDict = bip
+        self.modelsDict = all_models
+
         self.results = {'Components' : [], 'Composition' : [], 'Temperature' : -1, 'Pressure' : -1, 'Structure' : '', 'Thetas' : [], 'Hydrate Composition' : [], 'Thetas_tots' : []}
         self.detailsareShown = False
         self.all_trees = {}
@@ -288,7 +293,7 @@ class Hydrate_interface_squelette:
         RunBut.grid(row = 0, column = 0, sticky= tk.W, pady = 10, padx = 10)
         optimizeBut = ButtonEnter(frameLD, text = "Optimize Kihara Parameters", command = self.optimizeKihara)
         optimizeBut.grid(row = 0, column=1, pady = 10, padx = 10)
-        resetBut = ButtonEnter(frameLD, text = "Reset", command = self.reset, width = 7, foreground = 'red')
+        resetBut = ButtonEnter(frameLD, text = "Reset", command = self.reset, width = 7)
         resetBut.grid(row = 0, column=2, sticky=tk.E, pady = 10, padx = 10)
 
         # results frame
@@ -325,10 +330,10 @@ class Hydrate_interface_squelette:
         self.resultsTree.configure(xscrollcommand=scrollbarx.set, yscrollcommand=scrollbary.set)
         self.resultsTree.pack(padx = 5)
 
-        self.importBut = ButtonEnter(self.frameRUTree, text = "Import table", command = lambda : self.importTree(self.resultsTree, RESULTS_FILENAME), width = 10)
-        self.importBut.pack(side='bottom', pady = 5)
+        self.exportBut = ButtonEnter(self.frameRUTree, text = "Export table", command = lambda : self.exportTree(self.resultsTree), width = 10)
+        self.exportBut.pack(side='bottom', pady = 5)
 
-        self.all_trees[(0,0)] = [self.resultsTree, self.importBut, scrollbarx, scrollbary]
+        self.all_trees[(0,0)] = [self.resultsTree, self.exportBut, scrollbarx, scrollbary]
         self.all_treeFrames[(0,0)] = self.frameRUTree
 
         # myscrollbar= tk.Scrollbar(self.frameR, orient="vertical")
@@ -396,7 +401,7 @@ class Hydrate_interface_squelette:
 
             column_names = Hydrate_interface_squelette.column_names_ini.copy()
 
-            resultsTree, importBut, scrollbarx, scrollbary, frameTree = self.makeNewResultsTree(self.frameR, column_names)
+            resultsTree, exportBut, scrollbarx, scrollbary, frameTree = self.makeNewResultsTree(self.frameR, column_names)
 
             resultsTree.heading("#0", text = "y")
             resultsTree.heading("temp", text = "T (K)")
@@ -417,7 +422,7 @@ class Hydrate_interface_squelette:
 
             resultsTree.configure(displaycolumns=column_names)
 
-            self.all_trees[(0,0)] = resultsTree, importBut, scrollbarx, scrollbary
+            self.all_trees[(0,0)] = resultsTree, exportBut, scrollbarx, scrollbary
             self.all_treeFrames[(0,0)] = frameTree
 
 
@@ -435,36 +440,35 @@ class Hydrate_interface_squelette:
         resultsTreeTemp.configure(xscrollcommand=scrollbarxTemp.set, yscrollcommand=scrollbaryTemp.set)
         resultsTreeTemp.pack(padx = 2)
 
-        importButTemp = ButtonEnter(frameRDTree, text = "Import table", command = lambda : self.importTree(resultsTreeTemp, RESULTS_FILENAME), width = 10)
-        importButTemp.pack(side='bottom', pady = 5)
+        exportButTemp = ButtonEnter(frameRDTree, text = "Export table", command = lambda : self.exportTree(resultsTreeTemp), width = 10)
+        exportButTemp.pack(side='bottom', pady = 5)
 
-        return resultsTreeTemp, importButTemp, scrollbarxTemp, scrollbaryTemp, frameRDTree
+        return resultsTreeTemp, exportButTemp, scrollbarxTemp, scrollbaryTemp, frameRDTree
 
 
-    def importTree(self, tree: ttk.Treeview,  filename):
+    def exportTree(self, tree: ttk.Treeview, filename = ""):
+        filename = filedialog.asksaveasfilename(parent = self.root, initialdir=dir_path, filetypes=[("Text files (*.txt)",".txt")], defaultextension=".txt", confirmoverwrite=False)
         head = ['y0'] + [tree.heading(column_id)['text'] for column_id in tree['columns']]
         table1 = []
         for child in tree.get_children():
             table1 += ([[tree.item(child).get('text')] + tree.item(child).get('values')]
                     + [[tree.item(sub_child).get('text')] + tree.item(sub_child).get('values') for sub_child in tree.get_children(child)] )
-        print(table1)
+        # print(table1)
         n = len(tree.get_children(tree.get_children()[0])) + 1
         for i in range(int(len(table1)/n)):
             table1[n*i] = [item for item in table1[n*i] if item != '']
-        print(table1)
+        # print(table1)
         table = tabulate( table1,
                           headers= head)
-        print(table1, table, sep='\n')
-        with open(filename, 'a') as f:
-            f.write('\n' * 3)
-            f.write(table)
-        pass
-
+        # print(table1, table, sep='\n')
+        if filename != "":
+            with open(filename, 'a') as f:
+                f.write('\n' * 3)
+                f.write(table)
 
 # Example, TODO change to actual file names once they are created
 COMPONENTS_FILENAME = 'components.txt'
 STRUCTURES_FILENAME = 'structures.txt'
-RESULTS_FILENAME = 'results.txt'
 
 ### TEST ###
 
@@ -472,5 +476,5 @@ molecules = ['H20', 'CH4', 'CO2']
 structure = ['I', 'II']
 
 
-if __name__ == '__main__':
-    app = Hydrate_interface_squelette(molecules, structure)
+# if __name__ == '__main__':
+#     app = Hydrate_interface_squelette(molecules, structure)
