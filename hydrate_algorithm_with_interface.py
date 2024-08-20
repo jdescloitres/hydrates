@@ -1,6 +1,7 @@
 # Hydrate Composition Calculation Algorithm with Interface
 
 
+import csv
 import re
 import tkinter as tk
 from tkinter import messagebox
@@ -46,45 +47,156 @@ class Component:
         self.k2 = k2
         self.omega = omega
 
-# components = []
 
-# put all this in main (bc list_temp etc come from files)
-list_temp = []
-list_pres = []
+def calculatePfromT(T, PfromT):
+    return PfromT._call(self=PfromT, x_new= T)
 
-# PfromT = calc.PfromT_f(list_temp = list_temp, list_pres=list_pres)
-def calculatePfromT(T):
-    return T - 1
-    return PfromT._call(T)
+def calculateTfromP(P, TfromP):
+    return TfromP._call(self = TfromP, x_new=P)
 
-# TfromP = calc.TfromP_f(list_pres = list_pres, list_temp = list_temp)
-def calculateTfromP(P):
-    return P - 1
-    return TfromP._call(P)
+def getInterpolFuncs(compo_foldername):
+    all_rep_str = compo_foldername + 'all_repertories.csv'
+    with open(all_rep_str, mode='r') as infile:
+        reader = csv.reader(infile)
+        all_rep_list = [rows[0] for rows in reader]
 
+    list_temp=[]
+    list_pres=[]
+    for paper in all_rep_list:
+        filename = compo_foldername + paper + '.csv'
+        with open(filename, mode='r') as infile:
+            reader = csv.reader(infile)
+            next(reader)
+            properties = [(float(rows[0]), float(rows[1])) for rows in reader]
+            list_temp += [item[0] for item in properties]
+            list_pres += [item[1] for item in properties]
 
-def main(f):
+    PfromT = calc.PfromT_f(list_temp = list_temp, list_pres=list_pres)
+    TfromP = calc.TfromP_f(list_pres = list_pres, list_temp = list_temp)
+    return (PfromT, TfromP)
+
+def main():
     # TODO get data from files
+    # first, get PT methods for pure gases
+    allInterpolPT = {}
 
-    # TODO replace arguments with actual function arguments
+    folder_name = DATA_FOLDER + PT_FOLDER + '1CondensableElements/'
+    all_repertories_str = folder_name + 'all_repertories.txt'
+    with open(all_repertories_str, mode = 'r') as infile:
+        all_repertories_list = [line for line in infile.read().splitlines()]
+
+    for compo in all_repertories_list:
+        compo_foldername = folder_name + compo + '/'
+        allInterpolPT[compo] = getInterpolFuncs(compo_foldername)
+
+    # get all coefficients
+    bip = {}
+    bip_file = DATA_FOLDER + BIP_FOLDER + 'BIP.csv'
+    with open(bip_file, mode='r') as infile:
+        reader = csv.DictReader(infile, skipinitialspace=True)
+        all_lines = [row for row in reader]
+        for row in all_lines:
+            for col in list(all_lines[0].keys())[1:]:
+                if col != 'ref':
+                    bip[tuple(sorted((row['formula'],col)))] = float(row[col])
+
+    # initialize Cavity objects
+    cavitiesI_file = DATA_FOLDER + CAVITIES_FOLDER + 'structureI.csv'
+    with open(cavitiesI_file, mode='r') as infile:
+        reader = csv.DictReader(infile, skipinitialspace=True)
+        cavitiesI_properties = [row for row in reader]
+    cavitiesI = [Cavity(name=cavitiesI_properties[0]['name'],
+                        ray=cavitiesI_properties[0]['r'],
+                        coord_z=cavitiesI_properties[0]['z'],
+                        pop_nu=cavitiesI_properties[0]['nu']),
+                Cavity(name=cavitiesI_properties[1]['name'],
+                        ray=cavitiesI_properties[1]['r'],
+                        coord_z=cavitiesI_properties[1]['z'],
+                        pop_nu=cavitiesI_properties[1]['nu'])
+                ]
+
+    cavitiesII_file = DATA_FOLDER + CAVITIES_FOLDER + 'structureII.csv'
+    with open(cavitiesII_file, mode='r') as infile:
+        reader = csv.DictReader(infile, skipinitialspace=True)
+        cavitiesII_properties = [row for row in reader]
+    cavitiesII = [Cavity(name=cavitiesII_properties[0]['name'],
+                        ray=cavitiesII_properties[0]['r'],
+                        coord_z=cavitiesII_properties[0]['z'],
+                        pop_nu=cavitiesII_properties[0]['nu']),
+                Cavity(name=cavitiesII_properties[1]['name'],
+                        ray=cavitiesII_properties[1]['r'],
+                        coord_z=cavitiesII_properties[1]['z'],
+                        pop_nu=cavitiesII_properties[1]['nu'])
+                ]
+    print(cavitiesI, cavitiesII)
+
+    # get all models for Structure objects
+    all_rep_str = DATA_FOLDER + STRUCTURES_FOLDER + 'all_repertories.csv'
+    with open(all_rep_str, mode='r') as infile:
+        reader = csv.reader(infile)
+        all_rep_list = [rows[0] for rows in reader]
+    all_models = {}
+    for model in all_rep_list:
+        filename = DATA_FOLDER + STRUCTURES_FOLDER + model + '.csv'
+        with open(filename, mode='r') as infile:
+            reader = csv.DictReader(infile, skipinitialspace=True)
+            model_param = [row for row in reader]
+        all_models[model] = model_param
+
+
     # initialize Structure objects
-    structures = [ Structure(small_cavity=Cavity(), big_cavity=Cavity()) , Structure(small_cavity=Cavity(), big_cavity=Cavity()) ]
+
+    # structure_file = DATA_FOLDER + STRUCTURES_FOLDER + 'Handa_and_Tse.csv'
+    # with open(structure_file, mode='r') as infile:
+    #     reader = csv.DictReader(infile, skipinitialspace=True)
+    #     struct_properties = [row for row in reader]
+    struct_properties = all_models[CHOSEN_MODEL]
+    structures = {struct_properties[0]['id'] : Structure(struct_id=struct_properties[0]['id'],
+                                                deltaMu0=float(struct_properties[0]['deltaMu0']),
+                                                deltaH0=float(struct_properties[0]['deltaH0']),
+                                                deltaCp0=float(struct_properties[0]['deltaCp0']),
+                                                b=float(struct_properties[0]['b']),
+                                                deltaV0=float(struct_properties[0]['deltaV0']),
+                                                small_cavity=cavitiesI[0],
+                                                big_cavity=cavitiesI[1]),
+                struct_properties[1]['id'] : Structure(struct_id=struct_properties[1]['id'],
+                                                deltaMu0=float(struct_properties[1]['deltaMu0']),
+                                                deltaH0=float(struct_properties[1]['deltaH0']),
+                                                deltaCp0=float(struct_properties[1]['deltaCp0']),
+                                                b=float(struct_properties[1]['b']),
+                                                deltaV0=float(struct_properties[1]['deltaV0']),
+                                                small_cavity=cavitiesII[0],
+                                                big_cavity=cavitiesII[1])
+                    }
+
 
     # initialize Component objects
-    file = f        # explore all lines of file
-    all_components = {line['name'] : Component(line['name'], line['etc'], y=1) for line in range(len(file))}
-    for component_key in sorted(all_components):
-        component = all_components[component_key]
-        sig, eps = calc.optimisationKihara(component_pure=component)
-        component.epsilon = eps
-        component.sigma = sig
-        component.y = 0.0
+    components_file = DATA_FOLDER + COMPONENTS_FOLDER + 'Sloan.csv'
+    with open(components_file, mode='r') as infile:
+        reader = csv.DictReader(infile, skipinitialspace=True)
+        compo_properties = [row for row in reader]
+    all_components = {compo_properties[row]['name'] : Component(name=compo_properties[row]['name'],
+                                                            component_id=compo_properties[row]['id'],
+                                                            y=0.0,
+                                                            Tc=compo_properties[row]['Tc'],
+                                                            Pc=compo_properties[row]['Pc'],
+                                                            epsilon=compo_properties[row]['epsilon'],
+                                                            sigma=compo_properties[row]['sigma'],
+                                                            a=compo_properties[row]['a'],
+                                                            Vinf=compo_properties[row]['Vinf'],
+                                                            k1=compo_properties[row]['k1'],
+                                                            k2=compo_properties[row]['k2'],
+                                                            omega=compo_properties[row]['omega'])
+                for row in range(len(compo_properties))}
+
+    # first optimization of Kihara parameters
+    # for component in all_components.values():
+    #     epsilon, sigma = calc.optimisationKiharafromP(component_pure=component, all_models)
+    #     component.epsilon = epsilon
+    #     component.sigma = sigma
 
     # creation of the interface with the new run function that is created in this file
-    inter = interface.Hydrate_interface(componentsDict=all_components, structuresDict=structures)
-
-    pass
-
+    inter = Hydrate_interface(componentsDict=all_components, structuresDict=structures, interpolPT = allInterpolPT, bip = bip, all_models = all_models)
 
 class Hydrate_interface(interface.Hydrate_interface_squelette):
     def __init__(self, **kw):
@@ -130,6 +242,20 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
         small_cavity, big_cavity = self.structuresDict[self.results['Structure']].cavities
 
         tree_components = tuple(self.results['Components'])
+
+        # create here the new interpol functions for gas with multiple components
+        # may not be useful bc we only need it when optimizing parameters ==> done with "pure" gas
+        # if tree_components not in self.PTinterpolDict:
+        #     parent_folder = DATA_FOLDER + PT_FOLDER + f'{len(tree_components)}CondensableElements/'
+        #     compo_name = tree_components[0]
+        #     if len(tree_components) >0 :
+        #         for i in range(1, len(tree_components)):
+        #             compo_name += '=' + tree_components[i]
+        #             print(compo_name)
+        #     compo_folder_name = parent_folder + compo_name +'/'
+        #     print(compo_folder_name)
+        #     self.PTinterpolDict[tree_components]=getInterpolFuncs(compo_foldername = compo_folder_name)
+        # print(calculatePfromT(275, self.PTinterpolDict[tree_components][0]))
 
         ### differenciate how the tree is build depending on components
         # if this is the first round, i.e. if the results tree was empty before, the first tree is used
@@ -229,17 +355,13 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
     def update_results(self, PisCalculated : bool, TisCalculated: bool, StrisCalculated: bool):
 
         # TODO replace arguments with actual function arguments
-        # !!! MAKE SURE THAT IT IS SELECTED!! COMPONENTS AND NOT ALL COMPONENTS
-        # components = self.selected_components # where the keys are either the mol ids ==> can be sorted by id, or the mol names ==> can be sorted alphabetically
         components = {}
         for item in self.tree.get_children():
-            components[self.tree.item(item)['text']] = componentsli[self.tree.item(item)['text']]
+            components[self.tree.item(item)['text']] = self.allComponents[self.tree.item(item)['text']]
             components[self.tree.item(item)['text']].y = self.tree.item(item)['values'][0]
         structures = self.structuresDict
-        # coefficients = self.coefficients
+        bip = self.bipDict
 
-        # self.results['Components'] = {components[component_key].id : components[component_key].name for component_key in components}
-        # self.results['Composition'] = {components[component_key].id : components[component_key].y for component_key in components}
         self.results['Components'] = [components[component_key].name for component_key in sorted(components)]
         self.results['Composition'] = [ components[component_key].y for component_key in sorted(components)]
 
@@ -434,10 +556,22 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
 
 # print(f_x, calc.P_test, x)
 
+DATA_FOLDER = 'DataFiles/'
+PT_FOLDER = 'EquilibriumDataPT/'
+COMPONENTS_FOLDER = 'CondensableElementsProperties/'
+BIP_FOLDER = 'CondensableElementsProperties/BIP/'
+STRUCTURES_FOLDER = 'StructureReferenceProperties/'
+CHOSEN_MODEL = 'Handa_and_Tse'
+CAVITIES_FOLDER = 'StructureReferenceProperties/CavitiesInternalParameters/'
 
-componentsli={'H20' : Component('H20', 0, 0.0, 120, 2, 143, 0.3, 0.3, 200, 1220, -4000, 23),
-              'CH4' : Component('CH4', 1, 0.0, 120, 2, 143, 0.3, 0.3, 200, 1220, -4000, 23),
-              'CO2' : Component('C02', 2, 0.0, 120, 2, 143, 0.3, 0.3, 200, 1220, -4000, 23)}
+# componentsli={'H20' : Component('H20', 0, 0.0, 120, 2, 143, 0.3, 0.3, 200, 1220, -4000, 23),
+#               'CH4' : Component('CH4', 1, 0.0, 120, 2, 143, 0.3, 0.3, 200, 1220, -4000, 23),
+#               'C2H6' : Component('C2H6', 2, 0.0, 120, 2, 143, 0.3, 0.3, 200, 1220, -4000, 23)}
 
-inter = Hydrate_interface(componentsDict = componentsli,
-        structuresDict={'I' : Structure('I', 123, 143, 231, 2, 12, Cavity('5^12', 1e-10, 32, 20), Cavity('5^(12)6^2', 2*1e-10, 30, 24)), 'II' : Structure('II', 123, 143, 231, 2, 12, Cavity('5^12', 1e-10, 32, 20), Cavity('5^(12)6^4', 2*1e-10, 30, 24))})
+# inter = Hydrate_interface(componentsDict = componentsli,
+#         structuresDict={'I' : Structure('I', 123, 143, 231, 2, 12, Cavity('5^12', 1e-10, 32, 20), Cavity('5^(12)6^2', 2*1e-10, 30, 24)),
+#                         'II' : Structure('II', 123, 143, 231, 2, 12, Cavity('5^12', 1e-10, 32, 20), Cavity('5^(12)6^4', 2*1e-10, 30, 24))},
+#         interpolPT = {})
+
+
+main()
