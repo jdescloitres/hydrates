@@ -1,17 +1,18 @@
 # Hydrate Composition Calculation Algorithm without Interface
 
-# import math, scipy
+import math, scipy, cmath
 # from scipy.integrate import quad
 from scipy import integrate
 from math import exp, pi, log, sqrt, cos
 import numpy as np
+import scipy.integrate
 import sympy as sy
 from scipy.special import cbrt
 from scipy.optimize import newton, curve_fit
 from scipy.interpolate import interp1d
-
 # import hydrate_algorithm_with_interface as hydinter
 
+import matplotlib.pyplot as plt
 
 ### Definition of constants
 
@@ -22,42 +23,16 @@ P_ZERO = 0
 
 MAX_DIFFERENCE = 1E-5
 
-# Inside structure dictionary
-# KEY_FOR_MU0 = 'deltaMu0'
-# KEY_FOR_H0 = 'deltaH0'
-# KEY_FOR_CP0 = 'deltaCp0'
-# KEY_FOR_B = 'b'
-# KEY_FOR_V0 = 'deltaV0'
-# KEY_FOR_CAVITIES = 'cavities'       # list (2 items) of lists containing cavities caracteristics
-
-# # Inside 'cavities' value (list of lists) of structure dictionnary
-# INDEX_FOR_NU = 0            # index pointing to nu (number of this type of cavity) in the cavity info table in the structure info table
-# INDEX_FOR_R = 1             # index pointing to R (cavity ray) in the cavity info table in the structure info table
-# INDEX_FOR_Z = 2             # index pointing to z (coordination number) in the cavity info table
-
-# # Inside component dictionnary in components list (components is a list of dictionnaries)
-# KEY_FOR_ID = 'id'
-# KEY_FOR_EPSILON_OVER_K = 'epsilon_k'     # key pointing to epsilon in the component info table
-# KEY_FOR_SIGMA = 'sigma'         # key pointing to sigma in the component info table
-# KEY_FOR_A = 'a'                 # key pointing to a in the component info table
-# KEY_FOR_VINF = 'Vinf'
-# KEY_FOR_K1 = 'k1'
-# KEY_FOR_K2 = 'k2'
-# KEY_FOR_Y = 'y'
-# KEY_FOR_OMEGA = 'omega'
-# KEY_FOR_TC = 'Tc'
-# KEY_FOR_PC = 'Pc'
+# Note: epsilon/k is prefered over epsilon for calculations in this program
 
 # Note: for greater readibility, indexes will be used as follows:
 # i for cavity types
 # j for components
 
-### Equilibrium condition: solving deltaMu_L = deltaMu_H
+    ### Equilibrium condition: solving deltaMu_L = deltaMu_H
 
 ## Calculation of deltaMu_L using classical thermodynamcis
-
 # deltah
-
 def deltah_L(Temp : float, structure):
     deltaH0 = structure.deltaH0
     deltaCp0 = structure.deltaCp0
@@ -71,28 +46,29 @@ def deltah_L(Temp : float, structure):
     return deltaH0 + integral
 
 # non ideality term ln(a_w)
-
 def a_w(T : float, P : float, components, coefficients: dict):
     sumj = 0
     for component_key in components:
         component = components[component_key]
-        Vinf = component.vinf
+        Vinf = component.vinf * 1E-6
         K1 = component.k1
         K2 = component.k2
-        print(K1, K2)
-        H = exp(K1 + K2/T)
+        # print(K1, K2)
+        H = exp(K1 + K2/T) * 101325
         fj = fugacity_j(T, P, components, coefficients, component_key)
-        sumj += fj / (H * exp( P*Vinf / (R_IDEAL_GAS*T)))
+        print('P, fj :' , P, fj)
+        sumj += fj / (H * exp( P*1E6*Vinf / (R_IDEAL_GAS*T)))
     return 1 - sumj
 
 
 # Injecting in deltaMu_L
-
 def deltaMu_L(T : float ,P : float, structure, components, coefficients: dict):
+    # print('first, deltaMuL')
     deltaMu0 = structure.deltaMu0
     deltah = deltah_L(T, structure)
     deltaV0 = structure.deltaV0
-    # aw = a_w(T, P, components, coefficients)
+    aw = a_w(T, P, components, coefficients)
+    print('aw :' , aw)
 
     termMu = T * deltaMu0 / T_ZERO
 
@@ -100,26 +76,42 @@ def deltaMu_L(T : float ,P : float, structure, components, coefficients: dict):
         return deltah / (Temp**2)
     termH = T * integrate.quad(integrandH, T_ZERO, T)[0]
 
-    termV = deltaV0 * (P - P_ZERO)
+    termV = deltaV0 * (P*1E6 - P_ZERO)
+    # print('P, V : ', P, deltaV0, termV)
 
-    # termAw = R_IDEAL_GAS * T * log(aw)
+    termAw = R_IDEAL_GAS * T * log(aw)
 
-    # return termMu - termH + termV - termAw
-    return termMu - termH + termV
+    # print(P, 'deltaL :', termMu - termH + termV - termAw)
+    return termMu - termH + termV - termAw
+    # return termMu - termH + termV
 
 
 ## Calculation of deltaMu_H using statistical thermodynamics
-
 # Cij: Langmuir constant for component j in cavity i
-
 def langmuir_ij(T : float, structure_cavities, components, i: int, component_keyj) -> float:
 
     # determination of R, z, and Kihara parameters for a component j in a type i cavity
-    R = structure_cavities[i].r
+    R = structure_cavities[i].r * 1E-10
     z = structure_cavities[i].z
     epsilonk = components[component_keyj].epsilon
-    sigma = components[component_keyj].sigma
-    a = components[component_keyj].a
+    sigma = components[component_keyj].sigma * 1E-10
+    a = components[component_keyj].a * 1E-10
+    # print(component_keyj, R, z, epsilonk, sigma, a)
+
+    # p = ( (sigma/R)**6 ) * ( (1 - a/R)**(-6) )
+    # q = ( (sigma/R)**6 ) * ( (1 - a/R)**(-7) ) * a/R
+    # r = -1
+    # s = - ( (1 - a/R)**(-1) ) * a/R
+    # k = 1 / (R-a)
+    # l = 2 * ( (sigma**6) / (R**5)) * ( (1 - a/R)**(-4) ) * k
+    # A = 2 * z * epsilonk * K_BOLTZMANN * l * (p + q + r + s)
+    # B = 2 * z * epsilonk * K_BOLTZMANN * l * (44*p + 52*q + 15*r + 21*s)
+    # C = np.exp(- A / (K_BOLTZMANN*T))
+    # D = - B / (K_BOLTZMANN*T)
+    # print('D : ', D)
+    # print(1E-30 * 4 * pi * (1 / (K_BOLTZMANN * T)) * (C / (2*D)) * (2*D - 1) * np.exp(D * (R**2)))
+    # return 1E-30 * 4 * pi * (1 / (K_BOLTZMANN * T)) * (C / (2*D)) * (2*D - 1) * np.exp(D * (R**2))
+
 
     # definition of the function inside the integral
     def integrand(r):
@@ -128,32 +120,58 @@ def langmuir_ij(T : float, structure_cavities, components, i: int, component_key
         def w_r(r):
             # definition of delta_N
             def delta_N(N):
-                # print('delta : ', ((1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N)
                 return ( (1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N
 
+            # print("sigma12 : ", (sigma**12)/(r * R**11) , "sigma5 : ", (sigma** 6 / (r * R** 5)))
             return ( 2 * z * epsilonk
-                    * ( (sigma**12 / (r * R**11)) * (delta_N(10) + delta_N(11) * a/R )
-                    -   (sigma** 6 / (r * R** 5)) * (delta_N(4) + delta_N(5) * a/R ) )
+                    * ( ((sigma**12) / (r * (R**11))) * (delta_N(10) + delta_N(11) * a/R )
+                    -   ((sigma** 6) / (r * (R** 5))) * (delta_N(4) + delta_N(5) * a/R ) )
             )
-        # print('w : ', w_r(r)/ T)
-        # print('exp : ' , sy.exp( - w_r(r) / T))
-        print(sy.exp( - w_r(r) / T) * (r**2 / K_BOLTZMANN))
-        return sy.exp( - w_r(r) / T) * (r**2 / K_BOLTZMANN)
-        # TODO pb : k is 1E-23 so it makes the inside of exp really big
+        return r**2 * np.exp(-w_r(r)/T)
+    #     print('r : ', r , 'w/kT : ', w_r(r)/ T)
+    #     # print('w/T : ', w_r(r)/T)
+    #     # print('exp : ' , sy.exp( - w_r(r) / T))
+    #     # print( 'puissance : ', ((np.exp( - w_r(r) / T))**(1/K_BOLTZMANN)) * (r**2 / K_BOLTZMANN))
+    #     # print( 'dans exp :', np.exp( - w_r(r) / K_BOLTZMANN*T) * (r**2))
+    #     # return np.exp( - w_r(r) / (T)) * (r**2)
+    #     # print('r : ', r, '\n', 1 - w_r(r) / (K_BOLTZMANN *T) + (w_r(r) / (K_BOLTZMANN *T))**2 )
+    #     # return (1 - w_r(r) / (K_BOLTZMANN *T) + (1/2)*(w_r(r) / (K_BOLTZMANN *T))**2 ) * (r**2)
+    #     # return pi
+    #     print((r**2)* ((np.exp(- w_r(r) / (T)))**(1/K_BOLTZMANN**2)))
+    #     # return (r**2)* ((np.exp(- w_r(r) / (T)))**(1/K_BOLTZMANN**1))
+    #     return (r**2)* ((1 - w_r(r) / (T) + (1/2)*(w_r(r)**2 / (T)**2))**(1/K_BOLTZMANN**2))
 
-    r = sy.Symbol("r")
-    print('encore bloque ici')
-    integral = sy.integrate(integrand(r), (r, 0, R))
-    # integral = integrate.quad(integrand, 0, R)[0]
-    # print('0.1 :', integrand(1E-30), 'R :', integrand(R *1E-30), R)
-    print('arrive ici')
+    #     # return ((np.exp( - w_r(r) / T))**(1/K_BOLTZMANN)) * (r**2 / K_BOLTZMANN)
+    #     # TODO pb : k is 1E-23 so it makes the inside of exp really big
+    #     # print( 'dans exp :', np.exp( - w_r(r) / T) * (r**2))
+    #     # return np.exp( - w_r(r) / T) * (r**2)
 
-    print('int : ' , integral)
-    # return 4 * pi * 1  / (K_BOLTZMANN * T)
-    return 4 * pi * integrate.quad(integrand, 0, R)[0]  / T
+    # # r = sy.Symbol("r")
+    # # print('encore bloque ici')
+    # # integral = sy.integrate(integrand(r), (r, 0, R))
+    integral = scipy.integrate.quad(integrand, 0, R-a)[0]
+    # # integral = scipy.integrate.fixed_quad(integrand, 0, R)[0]
+    # # print('1E-30 :', integrand(2E-30), 'R :', integrand(R), R)
+    # # print('arrive ici')
+
+    # print('int : ' , integral)
+    # # return 4 * pi * 1  / (K_BOLTZMANN * T)
+    # # return 4 * pi * integrate.quad(integrand, 0, R)[0]  / T
+    return 4 * pi * integral  / (K_BOLTZMANN * T)
+    # # return 4 * pi * integral  / T
+
+
+    ### calculs for now pour N2
+    # if i== 0:
+    #     # return (1.617E-3/101325*T)*np.exp(2905/T)
+    #     return 4.44E-7
+    # elif i == 1:
+    #     # return (6.078E-3/101325*T)*np.exp(2431/T)
+    #     return 3.05E-6
+
+    # return 3.5E-7
 
 # a_m
-
 def a_j(T : float, components, component_keyj):
     Pc = components[component_keyj].pc
     Tc = components[component_keyj].tc
@@ -167,7 +185,7 @@ def a_jk(T : float, components, coefficients: dict, component_keyj, component_ke
     ak = a_j(T, components, component_keyk)
     idj = components[component_keyj].name
     idk = components[component_keyk].name
-    kjk = coefficients[tuple(sorted(idj,idk))]
+    kjk = coefficients[tuple(sorted((idj,idk)))]
     return sqrt(aj * ak) * (1 - kjk)
 
 def a_m(T : float, components, coefficients: dict):
@@ -183,10 +201,10 @@ def a_m(T : float, components, coefficients: dict):
     return sumj
 
 # b_m
-
 def b_j(components, component_keyj):
     Tc = components[component_keyj].tc
     Pc = components[component_keyj].pc
+    # print(Tc, Pc, R_IDEAL_GAS)
     return 0.0866 * R_IDEAL_GAS * Tc / Pc
 
 def b_m(components):
@@ -195,96 +213,183 @@ def b_m(components):
         yj = components[component_key].y
         bj = b_j(components, component_key)
         sumj += yj * bj
+        # print(yj, bj, sumj)
     return sumj
 
 # phij
-
 def lnphi_j(T : float, Pres : float, components, coefficients: dict, component_keyj):
     bj = b_j(components, component_keyj)
     bm = b_m(components)
     aj = a_j(T, components, component_keyj)
     am = a_m(T, components, coefficients)
-
-    # from equation of state, Z = PV/RT is solution of the cubic equation
+    # print('lnphi ' , component_keyj)
+    # print('bj etc : ', bj, bm, aj, am)
+    # # from equation of state, Z = PV/RT is solution of the cubic equation
     # Z**3 - Z**2 + (A - B**2 - B)*Z - AB = 0 , where
-    A = am * Pres / ((R_IDEAL_GAS**2) * (T**2))
+    # print('P :' , Pres)
+    A = am * Pres / ((R_IDEAL_GAS**2) * (T**2) * sqrt(T))
     B = bm * Pres / (R_IDEAL_GAS * T)
+    # a1 = 1
+    # b1 = -1
+    # c1 = A - B**2 - B
+    # d1 = -A*B
+    # c1 = 8E-7
+    # d1 = -1E-14
+    # print(c1, d1)
+
+    # # for better readibility, let's define
+    # p = (3*a*c - b**2) / (3*a**2)
+    # q = (2*b**3 - 9*a*b*c + 27*a**2*d) / (27*a**3)
+    # delta = (q**2 / 4 + p**3 / 27)
+    # print('delta : ', delta)
+    # if delta > 0:  # one real and two complex roots
+    #     u = (-q/2 + cmath.sqrt(delta))**(1/3)
+    #     v = (-q/2 - cmath.sqrt(delta))**(1/3)
+    #     x1 = u + v - b / (3*a)
+    #     x2 = -(u + v)/2 - b / (3*a) + (u - v)*cmath.sqrt(3)/2j
+    #     x3 = -(u + v)/2 - b / (3*a) - (u - v)*cmath.sqrt(3)/2j
+    #     print("One real root and two complex roots:")
+    #     print("x1 = ", x1.real)
+    #     print("x2 = ", x2)
+    #     print("x3 = ", x3)
+    # elif delta == 0:  # three real roots, two are equal
+    #     u = (-q/2)**(1/3)
+    #     v = u
+    #     x1 = 2*u - b / (3*a)
+    #     x2 = -u - b / (3*a)
+    #     print("Three real roots, two are equal:")
+    #     print("x1 = ", x1.real)
+    #     print("x2 = ", x2.real)
+    #     print("x3 = ", x3.real)
+    # else:  # three distinct real roots
+    #     u = (-q/2 + cmath.sqrt(delta))**(1/3)
+    #     v = (-q/2 - cmath.sqrt(delta))**(1/3)
+    #     x1 = u + v - b / (3*a)
+    #     x2 = -(u + v)/2 - b / (3*a) + (u - v)*cmath.sqrt(3)/2j
+    #     x3 = -(u + v)/2 - b / (3*a) - (u - v)*cmath.sqrt(3)/2j
+    #     print("Three distinct real roots:")
+    #     print("x1 = ", x1.real)
+    #     print("x2 = ", x2.real)
+    #     print("x3 = ", x3.real)
+
+
+    # return ( (bj / bm) * (x1 - 1)
+    #         - log(x1.real - B)
+    #         - (A / B) * (2 * sqrt(aj/am) - bj/bm ) * log(1 + B/x1.real)
+    # )
 
     # for better readibility, let's define
     p = -1
     q = (A - B**2 - B)
-    r = A * B
+    r = - A * B
     m = q - (p**2) / 3
     n = r + (2 * p**3 - 9*p*q) / 27
     delt = (n**2)/4 + (m**3) / 27
-
-    if delt > 0:
+    # print('delt : ', delt)
+    if delt >= 0:
         Zj = (- p / 3
              + cbrt(sqrt(delt) - n/2)
              + cbrt(- sqrt(delt) - n/2)
         )
+        # print('sup : ', Zj)
 
     elif delt < 0:
-        angle = - (n / abs(n)) * sqrt( (- 27 * n**2) / (4 * m**3) )
+        cosangle = - (n / abs(n)) * sqrt( (- 27 * n**2) / (4 * m**3) )
+        # print(cosangle)
+        angle = math.acos(cosangle)
+        # print(angle)
         Zj = ( - p / 3
             + 2 * sqrt(-m / 3) * cos(angle/3)
         )
-    else:
-        print('Error: no known value of Z for delta = 0')
-        # TODO raise error here
+        print('inf :' , Zj)
+    # else:
+    #     Zj = (- p / 3
+    #           + cbrt(- n/2)
+    #     )
+    #     print('Error: no known value of Z for delta = 0')
+    #     # TODO raise error here
 
+    # print('Zj : ', Zj, 'P : ', Pres)
     # print(Zj, B, B/Zj)
     # print(( (bj / bm) * (Zj - 1)
     #         - log(Zj - B)
     #         - (A / B) * (2 * sqrt(aj/am) - bj/bm ) * log(abs(1 + B/Zj))
     # ))
+    # print('tot', ( (bj / bm) * (Zj - 1)
+    #         - log(Zj - B)
+    #         - (A / B) * (2 * sqrt(aj/am) - bj/bm ) * log(1 + B/Zj)
+    # ))
+
+
+    # x = np.linspace(-5, 5,1000)
+
+    # def cubic_eq(x,a,b,c,d):
+    #     return a*x**3 +b*x**2 + c*x + d
+
+    # y = cubic_eq(x,a1,b1,c1,d1)
+
+    # fig, ax = plt.subplots()
+    # ax.plot(x, y)
+
+    # ax.spines['left'].set_position('zero')
+    # ax.spines['right'].set_color('none')
+    # ax.spines['bottom'].set_position('zero')
+    # ax.spines['top'].set_color('none')
+
+    # plt.show()
+
     return ( (bj / bm) * (Zj - 1)
-            - log(abs(Zj - B))
-            - (A / B) * (2 * sqrt(aj/am) - bj/bm ) * log(abs(1 + B/Zj))
+            - log(Zj - B)
+            - (A / B) * (2 * sqrt(aj/am) - bj/bm ) * log(1 + B/Zj)
     )
 
-
 # fj
-
-def fugacity_j(T : float, P : float, components: list, coefficients : dict, component_keyj):
-    # phij = exp(lnphi_j(T, P, components, coefficients, j))
-    phij = exp(-lnphi_j(T, P, components, coefficients, component_keyj))
+def fugacity_j(T : float, P : float, components: dict, coefficients : dict, component_keyj):
+    # phij = exp(-lnphi_j(T, P, components, coefficients, component_keyj))
+    if P == 0:
+        return 0
+    phij = exp(lnphi_j(T, P*1E6, components, coefficients, component_keyj))
+    # print('phij : ', phij)
     yj = components[component_keyj].y
-    return phij * yj * P
-
+    # print(phij * yj * P)
+    return phij * yj * P*1E6
 
 # Injecting in deltaMu_H
-
 def deltaMu_H(T, P, structure_cavities, components, coefficients: dict):
+    # print('deltaH')
     sumi = 0
+    cij = {component_key : (langmuir_ij(T, structure_cavities, components, i=0, component_keyj=component_key),
+                            langmuir_ij(T, structure_cavities, components, i=1, component_keyj=component_key)) for component_key in sorted(components)}
+    fj = {component_key : fugacity_j(T, P, components, coefficients, component_keyj=component_key) for component_key in sorted(components)}
+
+    # print(cij, fj)
     for i in range(len(structure_cavities)):
-        sumj = 0
-        for component_key in components:
-            cij = langmuir_ij(T, structure_cavities, components, i, component_key)
 
-            # TODO ARGUMENTS TO BE MODIFIED ONCE DEF IS UPDATED
-            fj = fugacity_j(T, P, components, coefficients, component_key)
+        sumthetai = 0
+        for component_keyj in components:
+            sumthetai += theta_ij(cij, fj, structure_cavities, i, component_keyj)
 
-            sumj += cij * fj
+        # TODO should it be nu or nu/nutot that is multiplied here ?
         nui = structure_cavities[i].nu
-        sumi += nui * log(1 - sumj)
+        # print(nui, sumthetai)
+        sumi += nui * log(1 - sumthetai)
+    # print(P, 'deltaH :', - R_IDEAL_GAS * T * sumi)
 
-    return R_IDEAL_GAS * T * sumi
+    # sumi = 0
+    # for i in range(len(structure_cavities)):
+    #     sumj = 0
+    #     for component_key in components:
+    #         cij = langmuir_ij(T, structure_cavities, components, i, component_key)
+    #         fj = fugacity_j(T, P, components, coefficients, component_key)
+    #         sumj += cij * fj
+    #     nui = structure_cavities[i].nu
+    #     sumi += nui * log(1 - sumj)
+
+    # print(sumi, R_IDEAL_GAS * T * sumi)
+    return - R_IDEAL_GAS * T * sumi
 
 
 # thetaij
-
-# def theta_ij(T : float, P : float, structure_cavities: list[hydinter.Cavity], components: dict[str, hydinter.Component], coefficients: list[list], i: int, component_keyj) -> float:
-#     sumtheta = 0
-#     for component_keyk in components:
-#         cik = langmuir_ij(T, structure_cavities, components, i, component_keyk)
-#         fk = fugacity_j(T, P, components, coefficients, component_keyk)
-#         sumtheta += cik * fk
-#     cij = langmuir_ij(T, structure_cavities, components, i, component_keyj)
-#     fj = fugacity_j(T, P, components, coefficients, component_keyj)
-
-#     return cij * fj / (1 + sumtheta)
-
 def theta_ij(cij : dict[str, tuple], fj : dict[str, float], structure_cavities, i : int, component_keyj) -> float:
     sumtheta = 0
     for component_keyk in cij:
@@ -301,22 +406,25 @@ def thetas_iall(thetas : dict[str, tuple], components):
 
 
 ## Optimisation (Kihara parameters)
-
-
+# interpolation from (P,T) data
 def PfromT_f(list_temp, list_pres):
     return interp1d(x= list_temp, y= list_pres)
 def TfromP_f(list_pres, list_temp):
+    # print(list_pres ,list_temp)
     return interp1d(x= list_pres, y= list_temp)
 
+# calculates the P that verifies the deltaMus equality, i.e Peq, for a certain model i from literature
 def calculatePi(Ti, Pexpi, structurei, componentsi, coefficientsi):
-    # determine le Pi qui verifie l'egalite des deltaMu
+    print('start Pi')
     def f(P, T = Ti, structure = structurei, components=componentsi,coefficients= coefficientsi):
         return deltaMu_H(T, P, structure.cavities, components, coefficients) - deltaMu_L(T, P, structure, components, coefficients)
+    print(Pexpi)
     P_i = newton(func= f, x0=Pexpi)
+    print('calculatePi : ' , P_i)
     return (P_i, deltaMu_L(Ti, P_i, structurei, componentsi, coefficientsi))
 
+# calculates the T that verifies the deltaMus equality, i.e Peq, for a certain model i from literature
 def calculateTi(Pi, Texpi, structurei, componentsi, coefficientsi):
-    # determine le Pi qui verifie l'egalite des deltaMu
     def f(T, P = Pi, structure = structurei, components=componentsi,coefficients= coefficientsi):
         return deltaMu_H(T, P, structure.cavities, components, coefficients) - deltaMu_L(T, P, structure, components, coefficients)
     T_i = newton(func= f, x0=Texpi)
@@ -325,8 +433,8 @@ def calculateTi(Pi, Texpi, structurei, componentsi, coefficientsi):
 
 # TODO CHANGE WITH ACUTAL ARGUMENTS
 # (note: the optimization is done for that component as sole component of the gas)
-def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, allPTinterpol, component_pure, structure, coefficients, kw, file, list_models, n_T = 10):
-    sigma, epsilon, a = file['parameters']
+def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, allPTinterpol, component_pure, structure, coefficients, list_models, n_T = 10):
+    sigma, epsilon = component_pure.sigma, component_pure.epsilon
     PfromT = allPTinterpol[component_pure.name][0]
     TfromP = allPTinterpol[component_pure.name][1]
     xy_P = []
@@ -337,8 +445,8 @@ def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, al
         for model_values in list_models.values():
             prev_deltaMu0, prev_deltaH0 = structure.deltaMu0, structure.deltaH0
             structure.deltaMu0, structure.deltaH0 = model_values[i]['deltaMu0'], model_values[i]['deltaH0']
-            # TODO add the other arguments needed IN BOTH METHODS
-            xy_P += [ calculatePi(T1 + j*(T2 - T1)/n_T, calculate_unknownPfromT(T1 + j*(T2 - T1)/n_T, PfromT), structurei=structure) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of temp
+            # NOTE : calculate Pi returns TWO values, one is delta TODO
+            xy_P += [ calculatePi(Ti = T1 + j*(T2 - T1)/n_T, Pexpi= calculate_unknownPfromT(T1 + j*(T2 - T1)/n_T, PfromT), structurei=structure, componentsi={component_pure.name : component_pure}, coefficientsi=coefficients) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of temp
     structure.deltaMu0, structure.deltaH0 = prev_deltaMu0, prev_deltaH0
 
     # note: unlike deltaMu_L, deltaMu_H does not depend on the macroscopic values, so it is independent from the models that were used to get Pi
@@ -351,8 +459,8 @@ def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, al
     return popt
 
 # TODO see above
-def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, allPTinterpol, component_pure, structure, coefficients, kw, file, list_models, n_P = 10):
-    sigma, epsilon, a = file['parameters']
+def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, allPTinterpol, component_pure, structure, coefficients, list_models, n_P = 10):
+    sigma, epsilon = component_pure.sigma, component_pure.epsilon
     PfromT = allPTinterpol[component_pure.name][0]
     TfromP = allPTinterpol[component_pure.name][1]
     xy_T = []
@@ -363,7 +471,7 @@ def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, al
         for model_values in list_models.values():
             prev_deltaMu0, prev_deltaH0 = structure.deltaMu0, structure.deltaH0
             structure.deltaMu0, structure.deltaH0 = model_values[i]['deltaMu0'], model_values[i]['deltaH0']
-            xy_T += [ calculateTi(P1 + j*(P2 - P1)/n_P, calculate_unknownTfromP(P1 + j*(P2 - P1)/n_P, TfromP), structurei=structure) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of pres
+            xy_T += [ calculateTi(Pi = P1 + j*(P2 - P1)/n_P, Texpi= calculate_unknownTfromP(P1 + j*(P2 - P1)/n_P, TfromP), structurei=structure, componentsi={component_pure.name : component_pure}, coefficientsi=coefficients) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of pres
     structure.deltaMu0, structure.deltaH0 = prev_deltaMu0, prev_deltaH0
 
     def f(T, eps, sig):
@@ -374,28 +482,7 @@ def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, al
     return popt
 
 ## Determination of hydrate composition xj_H
-
-# def xj_H(T, P, structure_cavities: list, components: list, coefficients: list, j:int):
-
-    # sumk = 0
-    # for k in range(len(components)):
-    #     sumi = 0
-    #     for i in range(len(structure_cavities)):
-    #         nui = structure_cavities[i][INDEX_FOR_NU]
-    #         thetaik = theta_ij(T, P, structure_cavities, components, coefficients, i, k)
-    #         sumi += nui * thetaik
-    #     sumk += sumi
-
-    # sumi2 = 0
-    # for i in range(len(structure_cavities)):
-    #     nui = structure_cavities[i][INDEX_FOR_NU]
-    #     thetaij = theta_ij(T, P, structure_cavities, components, coefficients, i, j)
-    #     sumi2 += nui * thetaij
-
-    # return sumi2 / sumk
-
 def xj_H(structure_cavities, components, thetas: dict, component_keyj: int):      # theta = dict[tuple] or dict[list]
-
     sumk = 0
     for component_keyk in components:
         sumi = 0
@@ -417,68 +504,19 @@ def xj_H(structure_cavities, components, thetas: dict, component_keyj: int):    
     return sumi2 / sumk
 
 
-#### Algorithm
-
-# TODO put this main in the file with the interface
-def main(T : float, P : float, structure, components, coefficients : dict, results: dict):
-    deltaMuH = deltaMu_H(T, P, structure.cavities, components, coefficients)
-    deltaMUL = deltaMu_L(T, P, structure, components, coefficients)
-    results['Temperature'] = T
-    if abs(deltaMuH - deltaMUL) <= MAX_DIFFERENCE:
-        results['Pressure'] = determineFinalValues(T, P, structure, components, coefficients)[0]
-        results['Thetas'] = determineFinalValues(T, P, structure, components, coefficients)[1]
-        print(determineFinalValues(T, P, structure, components, coefficients))
-        # calculate x with all the values of theta
-    else:
-        print('no')
-
-def determineFinalValues(T : float, P: float, structure, components, coefficients : dict):
-    Peq = P
-    # regression algo for P estimation
-    # theta = []
-    # for j in range(len(components)):
-    #     thetaS = theta_ij(T=T, P=P, structure_cavities=structure.cavities, components=components, coefficients=coefficients, i=0, j=j)
-    #     thetaL = theta_ij(T=T, P=P, structure_cavities=structure.cavities, components=components, coefficients=coefficients, i=1, j=j)
-    #     theta.append((thetaS, thetaL))
-    thetas = [(theta_ij(T=T, P=P, structure_cavities=structure.cavities, components=components, coefficients=coefficients, i=0, component_keyj=component_key),
-              theta_ij(T=T, P=P, structure_cavities=structure.cavities, components=components, coefficients=coefficients, i=1, component_keyj=component_key))
-             for component_key in components]
-    xH = [xj_H(structure.cavities, components, thetas, component_keyj=component_key) for component_key in components]
-    return Peq, thetas, xH
-
 ### TESTS
 
-# tab0 = [1, 2, 3]
-# tab1 = 4
-# tab = tab0 + [tab1]
 
-
-T_test = 100
-P_test = 0.1
+T_test = 280
+P_test = 5.2E6
 y0_test = 0.4
 y1_test = 0.6
 results_test = {'Components' : [], 'Composition' : [], 'Temperature' : -1, 'Pressure' : -1, 'Structure' : '', 'Thetas' : []}
-# cavities_test = [hydinter.Cavity(3.91E-10, 20, 2), hydinter.Cavity(4.33E-10, 24, 8)]
-# structure_test = hydinter.Structure('I', 1299, 1861, -38.12, 0.141, 3, cavities_test)
-# components_test = {'CH4' : hydinter.Component('CH4', 0, y0_test, 190.56, 4.599, 154.54, 3.165, 0.3834, 32, 15.826277, -1559.0631, 0.0115),
-#                    'CO2' : hydinter.Component('CO2', 1, y1_test, 304.19, 7.342, 168.77, 2.9818, 0.6805, 32, 14.283146, -2050.3269, 0.2276)
+# cavities_test = [hydinter.Cavity('6^1',3.91* 1E-10, 20, 16), hydinter.Cavity('6^2',4.33E-10, 24, 8)]
+# structure_test = hydinter.Structure('I', 1299, 1861, -38.12, 0.141, 3, cavities_test[0], cavities_test[1])
+# components_test = {'CH4' : hydinter.Component('CH4', 0, y0_test, 190.56, 4.599E6, 127.426, 3.135E-10, 0.3526E-10, 32, 15.826277, -1559.0631, 0.0115),
+#                    'CO2' : hydinter.Component('CO2', 1, y1_test, 304.19, 7.342E6, 168.77, 2.9818E-10, 0.6805E-10, 32, 14.283146, -2050.3269, 0.2276)
 #                    }
-
-# cavities_test = [[None for i in range(3)] for j in range(2)]
-# cavities_test[0][INDEX_FOR_NU] = 2
-# cavities_test[1][INDEX_FOR_NU] = 8
-# cavities_test[0][INDEX_FOR_R] = 3.91E-10
-# cavities_test[1][INDEX_FOR_R] = 4.33E-10
-# cavities_test[0][INDEX_FOR_Z] = 20
-# cavities_test[1][INDEX_FOR_Z] = 24
-# print(cavities_test)
-# structure_test = {KEY_FOR_MU0 : 1299, KEY_FOR_H0 : 1861, KEY_FOR_CP0 : -38.12, KEY_FOR_B : 0.141, KEY_FOR_V0 : 3, KEY_FOR_CAVITIES : cavities_test}
-# # components_test = [{KEY_FOR_ID : 0, KEY_FOR_EPSILON_OVER_K : 154.54, KEY_FOR_SIGMA : 3.165, KEY_FOR_A : 0.3834, KEY_FOR_VINF : 32, KEY_FOR_K1 : 15.826277, KEY_FOR_K2 : -1559.0631, KEY_FOR_Y : y0_test, KEY_FOR_OMEGA : 0.0115, KEY_FOR_TC : 190.56, KEY_FOR_PC : 4.599},
-# #                    {KEY_FOR_ID : 1, KEY_FOR_EPSILON_OVER_K : 168.77, KEY_FOR_SIGMA : 2.9818, KEY_FOR_A : 0.6805, KEY_FOR_VINF : 32, KEY_FOR_K1 : 14.283146, KEY_FOR_K2 : -2050.3269, KEY_FOR_Y : y1_test, KEY_FOR_OMEGA : 0.2276, KEY_FOR_TC : 304.19, KEY_FOR_PC : 7.342}
-# #             ]
-# components_test = [{KEY_FOR_ID : 0, KEY_FOR_EPSILON_OVER_K : 154.54, KEY_FOR_SIGMA : 3.165, KEY_FOR_A : 0.3834, KEY_FOR_VINF : 32, KEY_FOR_K1 : 15.826277, KEY_FOR_K2 : -1559.0631, KEY_FOR_Y : y0_test, KEY_FOR_OMEGA : 0.0115, KEY_FOR_TC : 190.56, KEY_FOR_PC : 4.599},
-#             ]
-# coefficients_test = [[0,0.1107], [0.1107, 0]]
 
 # print(components_test)
 # print(structure_test)
@@ -492,3 +530,89 @@ results_test = {'Components' : [], 'Composition' : [], 'Temperature' : -1, 'Pres
 # R en metres
 # k en m kg s K
 # P et fugacite en Pa
+
+T_test = 280
+a = 0.3834E-10
+sigma = 3.165E-10
+epsilonk = 154.54       # = epsilon / k
+R = 3.911E-10
+z = 20
+
+# def integrand(r):
+#     def w_r_test(r):
+#         # definition of delta_N
+#         def delta_N_test(N):
+#             # print('delta : ', ((1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N)
+#             # print ('delta : ', ( (1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N)
+#             # print("sigma12 : ", (sigma**12)/(r * R**11) , "sigma5 : ", (sigma** 6 / (r * R** 5)))
+#             return ( (1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N
+
+#         return ( 2 * z * epsilonk * K_BOLTZMANN**0
+#                 * ( (sigma**12 / (r * R**11)) * (delta_N_test(10) + delta_N_test(11) * a/R )
+#                 -   (sigma** 6 / (r * R** 5)) * (delta_N_test(4) + delta_N_test(5) * a/R ) )
+#         )
+#     print(w_r_test(r) / (T_test))
+#     print((r**2)* ((1 - w_r_test(r) / (T_test) + (1/2)*(w_r_test(r)**2 / (T_test)**2))**(1/K_BOLTZMANN**0)), 1 - w_r_test(r) / (T_test) + (1/2)*(w_r_test(r)**2 / (T_test)**2), r**2)
+#     print((r**2)* ((np.exp(- w_r_test(r) / (T_test)))**(1/K_BOLTZMANN**0)), np.exp(- w_r_test(r) / (T_test)), r**2)
+#     return (r**2)* ((np.exp(- w_r_test(r) / (T_test)))**(1/K_BOLTZMANN**0))
+
+# print(4 * pi * integrate.quad(integrand, 0, R)[0]  / K_BOLTZMANN* T_test)
+
+
+def w_r_test(r):
+        # definition of delta_N
+        def delta_N_test(N):
+            # print('delta : ', ((1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N)
+            # print ('delta : ', ( (1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N)
+            # print("sigma12 : ", (sigma**12)/(r * R**11) , "sigma5 : ", (sigma** 6 / (r * R** 5)))
+            return ( (1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N
+
+        return ( 2 * z * epsilonk * K_BOLTZMANN**1
+                * ( (sigma**12 / (r * R**11)) * (delta_N_test(10) + delta_N_test(11) * a/R )
+                -   (sigma** 6 / (r * R** 5)) * (delta_N_test(4) + delta_N_test(5) * a/R ) )
+        )
+
+p = ( (sigma/R)**6 ) * ( (1 - a/R)**(-6) )
+q = ( (sigma/R)**6 ) * ( (1 - a/R)**(-7) ) * a/R
+r1 = -1
+s = - ( (1 - a/R)**(-1) ) * a/R
+k = 1 / (R-a)
+l = 2 * ( (sigma**6) / (R**5)) * ( (1 - a/R)**(-4) ) * k
+A = 2 * z * epsilonk * K_BOLTZMANN * l * (p + q + r1 + s)
+B = 2 * z * epsilonk * K_BOLTZMANN * l * (44*p + 52*q + 15*r1 + 21*s)
+C = np.exp(- A / (K_BOLTZMANN*T_test))
+D = - B / (K_BOLTZMANN*T_test)
+def w2_test(r):
+    return A + B/(r**2)
+
+# x = np.linspace(1E-13, R, 5000)
+# # plt.plot(x, np.exp(w_r_test(x)))
+# # plt.plot(x, (np.exp(w_r_test(x)))**(1))
+# fig, (ax1, ax2) = plt.subplots(1, 2)
+# # ax1.plot(x, -w_r_test(x)/(T_test*K_BOLTZMANN**1))
+# ax1.plot(x, w_r_test(x))
+# ax2.plot(x, w2_test(x))
+# # ax2.plot(x, (np.exp(-w_r_test(x)))**(1/(T_test*K_BOLTZMANN**1)))
+# # ax3.plot(x, (np.exp(-w_r_test(x)/(T_test*K_BOLTZMANN**1))))
+# # ax3.plot(x, (1 - w_r_test(x) + (w_r_test(x)**2)/2)**(1/(K_BOLTZMANN**2)))
+# plt.show()
+
+N = 5
+def delta_N_test(r, N):
+    # print('delta : ', ((1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N)
+    # print ('delta : ', ( (1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N)
+    # print("sigma12 : ", (sigma**12)/(r * R**11) , "sigma5 : ", (sigma** 6 / (r * R** 5)))
+    return ( (1 - r/R - a/R)**(-N) - (1 + r/R - a/R)**(-N) ) / N
+
+def delta_test2(r, N):
+    return 2 * ( (1 - a/R)**(-N)) * (1 / (R - a)) * r
+
+# x = np.linspace(1E-13, R, 5000)
+# fig, (ax1, ax2) = plt.subplots(1, 2)
+# # ax1.plot(x, -w_r_test(x)/(T_test*K_BOLTZMANN**1))
+# ax1.plot(x, delta_N_test(x, 5))
+# ax2.plot(x, delta_test2(x, 5))
+
+# x = np.linspace(0, 1E-9, 100)
+# plt.plot(x, delta_N_test(x))
+# plt.show()

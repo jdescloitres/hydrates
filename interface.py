@@ -14,6 +14,7 @@ class TreeviewEdit(ttk.Treeview):
 
         self.bind("<Double-1>", self.on_double_click)
 
+    # this method will allow for the treeview object's cells to be modified (here, so that the gas composition can be modified)
     def on_double_click(self, event):
 
         # identifying which cell was selected, so we can add an Entry widget corresponding to it
@@ -48,11 +49,14 @@ class TreeviewEdit(ttk.Treeview):
         # placing the Entry widget over the selected cell
         entry_edit.place(x=column_box[0], y=column_box[1], w=column_box[2], h=column_box[3])
 
+    # the Entry object that was used to change the treeview value is deleted
     def on_focus_out(self, event):
         event.widget.destroy()
 
+    # the Entry object is deleted here too, but after assigning the new entered value to the treeview cell corresponding to it
     def on_enter(self, event):
         new_text = event.widget.get()
+        # first we need to check that the entered value is in range
         try :
             float(new_text)
 
@@ -65,7 +69,7 @@ class TreeviewEdit(ttk.Treeview):
 
         selected_iid = event.widget.editing_item_iid
         column_index = event.widget.editing_column_index
-
+        # the corresponding cell is changed to the new entered value
         if column_index == 0:
             current_values = self.item(selected_iid).get("values")
             current_values[column_index] = new_text
@@ -82,6 +86,8 @@ class EntryFocusOut(tk.Entry):
         self.bind("<Return>", self.on_enter)
         self.bind("<FocusOut>", self.on_focus_out)
 
+    # these will make sure that the entered temperature or pressure are within range, and then change the previous value to the new entered one
+
     def on_enter(self, event):
         new_text = event.widget.get()
         if new_text != '':
@@ -97,6 +103,7 @@ class EntryFocusOut(tk.Entry):
                 event.widget.delete(0, 'end')
                 return
 
+            # if the entered value is within range, the modified value is changed to the new entered value in the results dictionnary
             if event.widget == self.interface.tempEnt:
                 self.interface.results['Temperature'] = float(new_text)
             if event.widget == self.interface.presEnt:
@@ -124,6 +131,7 @@ class EntryFocusOut(tk.Entry):
                 event.widget.delete(0, 'end')
                 return
 
+            # if the entered value is within range, the modified value is changed to the new entered value in the results dictionnary
             if event.widget == self.interface.tempEnt:
                 self.interface.results['Temperature'] = float(new_text)
             if event.widget == self.interface.presEnt:
@@ -141,6 +149,7 @@ class ComboboxFocusOut(ttk.Combobox):
         self.interface = interface
         self.bind("<FocusOut>", self.on_focus_out)
 
+    # this will change the previous value for structure in results to the new chosen structure
     def on_focus_out(self, event):
         new_text = event.widget.get()
         self.interface.results['Structure'] = new_text
@@ -166,8 +175,8 @@ class Hydrate_interface_squelette:
     column_names_main_ini = ['temp', 'pres', 'struct', 'compo0', 'tocc_tot']
 
     def __init__(self, componentsDict: dict, structuresDict: dict, interpolPT: dict, bip : dict, all_models : dict) -> None:
-    # def __init__(self, data_folder: str) -> None:
         """Main window initialization"""
+        # attributes creation
         self.allComponents = componentsDict
         self.componentsList = list(componentsDict.keys())
         self.structuresDict = structuresDict
@@ -180,27 +189,7 @@ class Hydrate_interface_squelette:
         self.all_trees = {}
         self.all_treeFrames = {}
 
-        # self.componentsDict = {}
-        # self.structuresDict = {}
-        # self.folder = data_folder
-
-        # # TODO complete attributes for files depending on location and file content
-        # self.components_file = data_folder + COMPONENTS_FILENAME
-        # self.structures_file = data_folder + STRUCTURES_FILENAME
-        # if isfile(self.components_file):
-        #     with open(self.components_file) as f :
-        #         for line in f:
-        #             self.componentsList.append()
-        # else:
-        #     print(f'Error: data file {COMPONENTS_FILENAME} is not in location {self.folder}')
-
-        # if isfile(self.structures_file):
-        #     with open(self.strucutres_file) as f :
-        #         for line in f:
-        #             self.structuresDict.append()
-        # else:
-        #     print(f'Error: data file {STRUCTURES_FILENAME} is not in location {self.folder}')
-
+        # window initialization
         self.root = tk.Tk()
         self.root.maxsize(width=1520, height=1000)
         self.root.title('Hydrate Composition')
@@ -211,31 +200,29 @@ class Hydrate_interface_squelette:
 
 
     def makeWidgets(self):
-        """Secondary widgets in main window"""
-        # interactive frame
+        """Initialization of secondary widgets in main window"""
+        ## interactive frame initialization
         frameL = tk.LabelFrame(self.root, relief = tk.GROOVE, bd = 2, text='Choice of parameters')
         frameL.pack(side=tk.LEFT)
-
         # subframe for choices
         frameLU = tk.Frame(frameL, relief = tk.FLAT, bd = 2, width = 600, height = 400)
         frameLU.pack()
 
-        # Components frame
+        ## Gas compoisition
         # tk.Label(frameLU, text="Components").grid(row = 0, column = 0, columnspan=3, pady = 5, padx = 5)
         current_var = tk.StringVar()
         self.componentsChoice = ttk.Combobox(frameLU, width=35, textvariable = current_var, state = 'readonly')
         self.componentsChoice.bind("<<ComboboxSelected>>",lambda e: addCompo.focus())
         self.componentsChoice['values'] = self.componentsList
-
         # TODO make it work so that there is an indication as to what the combobox is for
         self.componentsChoice.set('--- Select component ---')
         self.componentsChoice.grid(row = 1, column = 0, columnspan=2, padx = 10, pady = 5, sticky=tk.E)
 
-        # adding selected component
+        # adding selected component to the tree of gas composition
         addCompo = ButtonEnter(frameLU, text = "Add", command = self.addCompo, width=7)
         addCompo.grid(row = 1, column = 2, sticky= tk.W, pady = 10, padx = 10)
 
-        # Autochanging subsubframe with chosen components and their compositions
+        # Autochanging tree in subsubframe with chosen components and their modifiable compositions
         frameLUM = tk.Frame(frameLU, relief = tk.FLAT, bd =2)
         frameLUM.grid(row=3, column = 0, columnspan = 4)
 
@@ -247,14 +234,13 @@ class Hydrate_interface_squelette:
 
         self.tree.grid(row=3, column = 0, columnspan=4)
 
-        # Deleting components from table
+        # Deleting components from table: adding buttons to remove the component entirely, and to reset all compositions to 0
         remCompo = ButtonEnter(frameLU, text = "Remove Component", command = self.removeCompo)
         remCompo.grid(row = 5, column=0, columnspan=2, pady = 3, padx = 20)
         clearComposition = ButtonEnter(frameLU, text = "Clear All Values", command = self.clearComposi)
         clearComposition.grid(row = 5, column=1, columnspan=2, pady = 3, padx = 20, sticky=tk.E)
 
-        # Other parameters
-
+        ## Other parameters
         # Widgets for the setting of Temperature: checkbox to enable entry of value
         tk.Label(frameLU, text= "Temperature (K) :").grid(sticky= tk.E, row = 7, column = 1, pady = 5, padx = 10)
         self.tempEnt = EntryFocusOut(frameLU, width=25, interface=self)
@@ -285,7 +271,7 @@ class Hydrate_interface_squelette:
         self.checkStruct_var = tk.IntVar()
         tk.Checkbutton(frameLU, variable = self.checkStruct_var, text= "impose choice of structure", command = lambda : self.activateCheck(self.checkStruct_var, self.structureChoice)).grid(sticky= tk.W, row = 9, column=0, pady = 5, padx = 10)
 
-        # General buttons subframe
+        ## General buttons subframe
         frameLD = tk.Frame(frameL, relief = tk.FLAT, bd = 2)
         frameLD.pack(side = tk.BOTTOM)
 
@@ -296,13 +282,14 @@ class Hydrate_interface_squelette:
         resetBut = ButtonEnter(frameLD, text = "Reset", command = self.reset, width = 7)
         resetBut.grid(row = 0, column=2, sticky=tk.E, pady = 10, padx = 10)
 
-        # results frame
+        ## Results frame
         self.frameR = tk.LabelFrame(self.root, relief=tk.GROOVE, bd = 2, text='Results')
         self.frameR.pack(side=tk.RIGHT, pady = 10)
 
         self.frameRUTree = tk.Frame(self.frameR, relief=tk.FLAT, bd = 2)
         self.frameRUTree.pack(side='top', pady = 5)
 
+        # results tree initialization
         column_names = Hydrate_interface_squelette.column_names_ini.copy()
         self.resultsTree = ttk.Treeview(self.frameRUTree,height=6, columns= column_names, displaycolumns=column_names)
 
@@ -330,9 +317,11 @@ class Hydrate_interface_squelette:
         self.resultsTree.configure(xscrollcommand=scrollbarx.set, yscrollcommand=scrollbary.set)
         self.resultsTree.pack(padx = 5)
 
+        # export button enabling the export of the values in this tree
         self.exportBut = ButtonEnter(self.frameRUTree, text = "Export table", command = lambda : self.exportTree(self.resultsTree), width = 10)
         self.exportBut.pack(side='bottom', pady = 5)
 
+        # add the initial tree to the list of existing results trees to keep track
         self.all_trees[(0,0)] = [self.resultsTree, self.exportBut, scrollbarx, scrollbary]
         self.all_treeFrames[(0,0)] = self.frameRUTree
 
@@ -341,6 +330,7 @@ class Hydrate_interface_squelette:
 
 
     def addCompo(self):
+        """Adds the selected component to the components tree when the Add button is clicked"""
         selected_compo = self.componentsChoice.get()
         if selected_compo == '':
             return
@@ -351,6 +341,7 @@ class Hydrate_interface_squelette:
 
 
     def removeCompo(self):
+        """Removes the selected component from the components tree when the Remove button is clicked"""
         if self.tree.selection() == ():
             return
         selected_item = self.tree.selection()[0]
@@ -359,11 +350,13 @@ class Hydrate_interface_squelette:
 
     #resets all the compositions values to 0
     def clearComposi(self):
+        """Resets all the components' composition in the components tree to 0.0 when the Clear button is clicked"""
         for item in self.tree.get_children():
             self.tree.item(item, values = 0.0)
 
 
     def activateCheck(self, var, widget):
+        """Makes sure that Temperature, Pressure or Structure choice is enabled/disabled according to their corresponding checkbutton"""
         if var.get() == 1:          # checked
             if isinstance(widget, ttk.Combobox):
                 widget.config(state='readonly')
@@ -372,7 +365,7 @@ class Hydrate_interface_squelette:
             widget.focus()
         elif var.get() == 0:        # unchecked
             widget.config(state='disabled')
-            # at least one of Pressure or Temperature has to be entered
+            # at least one of Pressure or Temperature has to be entered, otherwise the calculations will not work
             if widget == self.tempEnt and self.checkPres_var.get() == 0:
                 self.checkPres_var.set(1)
                 self.activateCheck(self.checkPres_var, self.presEnt)
@@ -390,17 +383,19 @@ class Hydrate_interface_squelette:
 
 
     def reset(self):
-        if len(self.all_trees) == 1 and len(list(self.all_trees.values())[0][0].get_children()) == 0:
+        """Resets the results tree(s) when the Reset button is clicked"""
+        if len(self.all_trees) == 1 and len(list(self.all_trees.values())[0][0].get_children()) == 0:           # i.e. if only the initial blank tree is there, no need for a reset
             return
         if messagebox.askokcancel(title = "WARNING: Data will be lost",
                 message = "This will reset the data in all results tables. \n Do you wish to proceed?"):
             for tree_id in self.all_treeFrames:
-                self.all_treeFrames[tree_id].destroy()
+                self.all_treeFrames[tree_id].destroy()                                                          # destroying the tree frame will destroy the tree and all widgets connected to it
+            # the lists of existing trees is then reset
             self.all_trees = {}
             self.all_treeFrames = {}
 
+            # a new initial blank tree is created
             column_names = Hydrate_interface_squelette.column_names_ini.copy()
-
             resultsTree, exportBut, scrollbarx, scrollbary, frameTree = self.makeNewResultsTree(self.frameR, column_names)
 
             resultsTree.heading("#0", text = "y")
@@ -427,7 +422,7 @@ class Hydrate_interface_squelette:
 
 
     def makeNewResultsTree(self, master, columns) -> ttk.Treeview:
-        # returns the new tree
+        """Creates and returns an additional results tree with the given columns"""
         frameRDTree = tk.Frame(master, relief=tk.FLAT, bd = 2)
         frameRDTree.pack(side='top', pady = 5)
 
@@ -447,34 +442,29 @@ class Hydrate_interface_squelette:
 
 
     def exportTree(self, tree: ttk.Treeview, filename = ""):
-        filename = filedialog.asksaveasfilename(parent = self.root, initialdir=dir_path, filetypes=[("Text files (*.txt)",".txt")], defaultextension=".txt", confirmoverwrite=False)
-        head = ['y0'] + [tree.heading(column_id)['text'] for column_id in tree['columns']]
+        """Opens a dialog window to chose/create a file in which to save the data from the results tree corresponding to the Export button that was clicked"""
+        filename = filedialog.asksaveasfilename(parent = self.root,                             # prevents the dialogbox from being hidden behind the main window
+                                                initialdir=dir_path,                            # opens the file explorer to current location
+                                                filetypes=[("Text files (*.txt)",".txt")],      # authorized file types in which to save data
+                                                defaultextension=".txt",
+                                                confirmoverwrite=False)
+        # turns the data in the treeview into a reader friendly string
+        head = [tree.heading('#0')['text']] + [tree.heading(column_id)['text'] for column_id in tree['columns']]
         table1 = []
         for child in tree.get_children():
             table1 += ([[tree.item(child).get('text')] + tree.item(child).get('values')]
                     + [[tree.item(sub_child).get('text')] + tree.item(sub_child).get('values') for sub_child in tree.get_children(child)] )
-        # print(table1)
         n = len(tree.get_children(tree.get_children()[0])) + 1
         for i in range(int(len(table1)/n)):
             table1[n*i] = [item for item in table1[n*i] if item != '']
-        # print(table1)
         table = tabulate( table1,
                           headers= head)
-        # print(table1, table, sep='\n')
         if filename != "":
             with open(filename, 'a') as f:
                 f.write('\n' * 3)
                 f.write(table)
 
-# Example, TODO change to actual file names once they are created
-COMPONENTS_FILENAME = 'components.txt'
-STRUCTURES_FILENAME = 'structures.txt'
-
 ### TEST ###
 
-molecules = ['H20', 'CH4', 'CO2']
-structure = ['I', 'II']
-
-
 # if __name__ == '__main__':
-#     app = Hydrate_interface_squelette(molecules, structure)
+#     app = Hydrate_interface_squelette(molecules, structure)s
