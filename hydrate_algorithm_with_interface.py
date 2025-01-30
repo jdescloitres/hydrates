@@ -159,6 +159,7 @@ def main():
             reader = csv.DictReader(infile, skipinitialspace=True)
             model_param = [row for row in reader]
         all_models[model] = model_param
+        # NOTE: the values in this dictionnary are strings, and float() needs to be called when using those values
 
 
     # initialize Structure objects
@@ -201,27 +202,32 @@ def main():
                                                             omega=float(compo_properties[row]['omega']))
                 for row in range(len(compo_properties))}
 
-    # # first optimization of Kihara parameters
+    # first optimization of Kihara parameters
     # for component in all_components.values():
-    #     epsilon, sigma = calc.optimisationKiharafromP(component_pure=component, all_models)
+    # for component in {'N2': all_components['N2']}.values():
+    #     # print([(att, getattr(structures['I'],att)) for att in dir(structures['I'])])
+    #     epsilon, sigma = calc.optimisationKiharafromT(T1 = 273, T2=290, calculate_unknownPfromT=calculatePfromT, calculateTfromP=calculateTfromP,allPTinterpol=allInterpolPT, component_pure=component, structure=structures['I'], coefficients=bip, list_models= all_models, n_T=10)
     #     component.epsilon = epsilon
     #     component.sigma = sigma
+    #     print(epsilon, sigma)
 
     ### TESTS for calc
     # print(calc.fugacity_j(T=300, P=40E6, components={'N2': all_components['N2']},coefficients=bip, component_keyj= 'N2'))
     # print('langmuir : ', calc.langmuir_ij(T=273, structure_cavities=[Cavity('6^1',3.91, 20, 16), Cavity('6^2',4.735, 28, 8)], components={'N2': all_components['N2']}, i = 1, component_keyj= 'N2'))
-    # xP = np.linspace(0, 20, 1000)
+    xP = np.linspace(0, 50, 1000)
     # fig, (ax1, ax2) = plt.subplots(1, 2)
-    # cav = [Cavity('5^1',3.91, 20, 0.0434), Cavity('5^2',4.33, 24, 0.1304)]
-    # def yPL(x):
-    #     return [calc.deltaMu_L(T=274, P=x_unit, structure=Structure('I', 1287, 931, -38.12, 0.141, 0.0000045959, cav[0], cav[1]),components={'N2': all_components['N2']},coefficients=bip) for x_unit in x]
-    # def yPH(x):
-    #     return [calc.deltaMu_H(T=274, P=x_unit,structure_cavities=cav, components={'N2': all_components['N2']},coefficients=bip) for x_unit in x]
-    # # for i in range(len(xP)):
-    # #     print(xP[i], yPL(xP)[i], yPH(xP)[i])
+    cav = [Cavity('5^1',3.91, 20, 0.0434), Cavity('5^2',4.33, 24, 0.1304)]
+    def yPL(x):
+        return [calc.deltaMu_L(T=273, P=x_unit, structure=Structure('I', 1714, 1400, -38.12, 0.141, 0.00000499644, cav[0], cav[1]),components={'N2': all_components['N2']},coefficients=bip) for x_unit in x]
+    def yPH(x):
+        return [calc.deltaMu_H(T=273, P=x_unit,structure_cavities=cav, components={'N2': all_components['N2']},coefficients=bip) for x_unit in x]
+    # for i in range(len(xP)):
+    #     print(xP[i], yPL(xP)[i], yPH(xP)[i])
     # ax1.plot(xP, yPL(xP),color = 'red')
     # ax1.plot(xP, yPH(xP))
-    # plt.show()
+    plt.plot(xP, yPL(xP),color = 'red')
+    plt.plot(xP, yPH(xP))
+    plt.show()
 
     # creation of the interface with the new run function that is created in this file
     inter = Hydrate_interface(componentsDict=all_components, structuresDict=structures, interpolPT = allInterpolPT, bip = bip, all_models = all_models)
@@ -476,7 +482,6 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
                 self.results['Pressure'] = Peq
                 self.results['Structure'] = struct.id
                 print(cij, fj)
-
 
         # if T is not given
         elif TisCalculated:

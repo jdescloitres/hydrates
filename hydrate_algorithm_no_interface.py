@@ -56,19 +56,19 @@ def a_w(T : float, P : float, components, coefficients: dict):
         # print(K1, K2)
         H = exp(K1 + K2/T) * 101325
         fj = fugacity_j(T, P, components, coefficients, component_key)
-        print('P, fj :' , P, fj)
+        # print('P, fj :' , P, fj)
         sumj += fj / (H * exp( P*1E6*Vinf / (R_IDEAL_GAS*T)))
     return 1 - sumj
 
 
 # Injecting in deltaMu_L
 def deltaMu_L(T : float ,P : float, structure, components, coefficients: dict):
-    # print('first, deltaMuL')
+    print('first, deltaMuL')
     deltaMu0 = structure.deltaMu0
     deltah = deltah_L(T, structure)
     deltaV0 = structure.deltaV0
     aw = a_w(T, P, components, coefficients)
-    print('aw :' , aw)
+    # print('P:' , P)
 
     termMu = T * deltaMu0 / T_ZERO
 
@@ -81,7 +81,7 @@ def deltaMu_L(T : float ,P : float, structure, components, coefficients: dict):
 
     termAw = R_IDEAL_GAS * T * log(aw)
 
-    # print(P, 'deltaL :', termMu - termH + termV - termAw)
+    print(P, 'deltaL :', termMu - termH + termV - termAw)
     return termMu - termH + termV - termAw
     # return termMu - termH + termV
 
@@ -301,7 +301,7 @@ def lnphi_j(T : float, Pres : float, components, coefficients: dict, component_k
         Zj = ( - p / 3
             + 2 * sqrt(-m / 3) * cos(angle/3)
         )
-        print('inf :' , Zj)
+        # print('inf :' , Zj)
     # else:
     #     Zj = (- p / 3
     #           + cbrt(- n/2)
@@ -349,7 +349,7 @@ def fugacity_j(T : float, P : float, components: dict, coefficients : dict, comp
     if P == 0:
         return 0
     phij = exp(lnphi_j(T, P*1E6, components, coefficients, component_keyj))
-    # print('phij : ', phij)
+    print("PROBLEME ICI, P EST NEG, MEME PB QUE AVANT, LE P PART DANS TOUS LES SENS : ")
     yj = components[component_keyj].y
     # print(phij * yj * P)
     return phij * yj * P*1E6
@@ -358,8 +358,10 @@ def fugacity_j(T : float, P : float, components: dict, coefficients : dict, comp
 def deltaMu_H(T, P, structure_cavities, components, coefficients: dict):
     # print('deltaH')
     sumi = 0
+    print('Pc : ', P, T)
     cij = {component_key : (langmuir_ij(T, structure_cavities, components, i=0, component_keyj=component_key),
                             langmuir_ij(T, structure_cavities, components, i=1, component_keyj=component_key)) for component_key in sorted(components)}
+    print('Pf :', P)
     fj = {component_key : fugacity_j(T, P, components, coefficients, component_keyj=component_key) for component_key in sorted(components)}
 
     # print(cij, fj)
@@ -371,9 +373,8 @@ def deltaMu_H(T, P, structure_cavities, components, coefficients: dict):
 
         # TODO should it be nu or nu/nutot that is multiplied here ?
         nui = structure_cavities[i].nu
-        # print(nui, sumthetai)
         sumi += nui * log(1 - sumthetai)
-    # print(P, 'deltaH :', - R_IDEAL_GAS * T * sumi)
+    print(P, 'deltaH :', - R_IDEAL_GAS * T * sumi)
 
     # sumi = 0
     # for i in range(len(structure_cavities)):
@@ -415,12 +416,15 @@ def TfromP_f(list_pres, list_temp):
 
 # calculates the P that verifies the deltaMus equality, i.e Peq, for a certain model i from literature
 def calculatePi(Ti, Pexpi, structurei, componentsi, coefficientsi):
-    print('start Pi')
+    print('start Pi with ', Pexpi, Ti)
     def f(P, T = Ti, structure = structurei, components=componentsi,coefficients= coefficientsi):
-        return deltaMu_H(T, P, structure.cavities, components, coefficients) - deltaMu_L(T, P, structure, components, coefficients)
-    print(Pexpi)
+        muH = deltaMu_H(T, P, structure.cavities, components, coefficients)
+        muL = deltaMu_L(T, P, structure, components, coefficients)
+        print(muH, muL)
+        return muL - muH
+        # return deltaMu_H(T, P, structure.cavities, components, coefficients) - deltaMu_L(T, P, structure, components, coefficients)
     P_i = newton(func= f, x0=Pexpi)
-    print('calculatePi : ' , P_i)
+    print('calculatePi : ' , P_i, f(P_i), deltaMu_L(Ti, P_i, structurei, componentsi, coefficientsi))
     return (P_i, deltaMu_L(Ti, P_i, structurei, componentsi, coefficientsi))
 
 # calculates the T that verifies the deltaMus equality, i.e Peq, for a certain model i from literature
@@ -441,11 +445,13 @@ def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, al
     i = 0
     if structure.id == 'II':
         i = 1
-    for j in range(1, n_T + 1):
+    for j in range(0, n_T + 1):
         for model_values in list_models.values():
+            print(model_values)
             prev_deltaMu0, prev_deltaH0 = structure.deltaMu0, structure.deltaH0
-            structure.deltaMu0, structure.deltaH0 = model_values[i]['deltaMu0'], model_values[i]['deltaH0']
+            structure.deltaMu0, structure.deltaH0 = float(model_values[i]['deltaMu0']), float(model_values[i]['deltaH0'])
             # NOTE : calculate Pi returns TWO values, one is delta TODO
+            # PB : changing the values of the models makes P go negative....
             xy_P += [ calculatePi(Ti = T1 + j*(T2 - T1)/n_T, Pexpi= calculate_unknownPfromT(T1 + j*(T2 - T1)/n_T, PfromT), structurei=structure, componentsi={component_pure.name : component_pure}, coefficientsi=coefficients) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of temp
     structure.deltaMu0, structure.deltaH0 = prev_deltaMu0, prev_deltaH0
 
@@ -467,10 +473,10 @@ def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, al
     i = 0
     if structure.id == 'II':
         i = 1
-    for j in range(1, n_P + 1):
+    for j in range(0, n_P + 1):
         for model_values in list_models.values():
             prev_deltaMu0, prev_deltaH0 = structure.deltaMu0, structure.deltaH0
-            structure.deltaMu0, structure.deltaH0 = model_values[i]['deltaMu0'], model_values[i]['deltaH0']
+            structure.deltaMu0, structure.deltaH0 = float(model_values[i]['deltaMu0']), float(model_values[i]['deltaH0'])
             xy_T += [ calculateTi(Pi = P1 + j*(P2 - P1)/n_P, Texpi= calculate_unknownTfromP(P1 + j*(P2 - P1)/n_P, TfromP), structurei=structure, componentsi={component_pure.name : component_pure}, coefficientsi=coefficients) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of pres
     structure.deltaMu0, structure.deltaH0 = prev_deltaMu0, prev_deltaH0
 

@@ -467,4 +467,4 @@ class Hydrate_interface_squelette:
 ### TEST ###
 
 # if __name__ == '__main__':
-#     app = Hydrate_interface_squelette(molecules, structure)s
+#     app = Hydrate_interface_squelette(molecules, structure)
