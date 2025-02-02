@@ -46,7 +46,7 @@ def deltah_L(Temp : float, structure):
     return deltaH0 + integral
 
 # non ideality term ln(a_w)
-def a_w(T : float, P : float, components, coefficients: dict):
+def a_w(T : float, P : float, components, bips: dict):
     sumj = 0
     for component_key in components:
         component = components[component_key]
@@ -55,19 +55,19 @@ def a_w(T : float, P : float, components, coefficients: dict):
         K2 = component.k2
         # print(K1, K2)
         H = exp(K1 + K2/T) * 101325
-        fj = fugacity_j(T, P, components, coefficients, component_key)
+        fj = fugacity_j(T, P, components, bips, component_key)
         # print('P, fj :' , P, fj)
         sumj += fj / (H * exp( P*1E6*Vinf / (R_IDEAL_GAS*T)))
     return 1 - sumj
 
 
 # Injecting in deltaMu_L
-def deltaMu_L(T : float ,P : float, structure, components, coefficients: dict):
+def deltaMu_L(T : float ,P : float, structure, components, bips: dict):
     print('first, deltaMuL')
     deltaMu0 = structure.deltaMu0
     deltah = deltah_L(T, structure)
     deltaV0 = structure.deltaV0
-    aw = a_w(T, P, components, coefficients)
+    aw = a_w(T, P, components, bips)
     # print('P:' , P)
 
     termMu = T * deltaMu0 / T_ZERO
@@ -112,6 +112,7 @@ def langmuir_ij(T : float, structure_cavities, components, i: int, component_key
     # print(1E-30 * 4 * pi * (1 / (K_BOLTZMANN * T)) * (C / (2*D)) * (2*D - 1) * np.exp(D * (R**2)))
     # return 1E-30 * 4 * pi * (1 / (K_BOLTZMANN * T)) * (C / (2*D)) * (2*D - 1) * np.exp(D * (R**2))
 
+    # print(T)
 
     # definition of the function inside the integral
     def integrand(r):
@@ -180,22 +181,22 @@ def a_j(T : float, components, component_keyj):
     alphaj = ( 1 + m * (1- sqrt(T/Tc)) ) ** 2
     return 0.42747 * (R_IDEAL_GAS**2) * (Tc**2) * sqrt(T) * alphaj / Pc
 
-def a_jk(T : float, components, coefficients: dict, component_keyj, component_keyk):
+def a_jk(T : float, components, bips: dict, component_keyj, component_keyk):
     aj = a_j(T, components, component_keyj)
     ak = a_j(T, components, component_keyk)
-    idj = components[component_keyj].name
-    idk = components[component_keyk].name
-    kjk = coefficients[tuple(sorted((idj,idk)))]
+    idj = components[component_keyj].formula
+    idk = components[component_keyk].formula
+    kjk = bips[tuple(sorted((idj,idk)))]
     return sqrt(aj * ak) * (1 - kjk)
 
-def a_m(T : float, components, coefficients: dict):
+def a_m(T : float, components, bips: dict):
     sumj = 0
     for component_keyj in components:
         yj = components[component_keyj].y
         sumk = 0
         for component_keyk in components:
             yk = components[component_keyk].y
-            ajk = a_jk(T, components, coefficients, component_keyj, component_keyk)
+            ajk = a_jk(T, components, bips, component_keyj, component_keyk)
             sumk += yk * ajk
         sumj += yj * sumk
     return sumj
@@ -217,11 +218,11 @@ def b_m(components):
     return sumj
 
 # phij
-def lnphi_j(T : float, Pres : float, components, coefficients: dict, component_keyj):
+def lnphi_j(T : float, Pres : float, components, bips: dict, component_keyj):
     bj = b_j(components, component_keyj)
     bm = b_m(components)
     aj = a_j(T, components, component_keyj)
-    am = a_m(T, components, coefficients)
+    am = a_m(T, components, bips)
     # print('lnphi ' , component_keyj)
     # print('bj etc : ', bj, bm, aj, am)
     # # from equation of state, Z = PV/RT is solution of the cubic equation
@@ -344,25 +345,25 @@ def lnphi_j(T : float, Pres : float, components, coefficients: dict, component_k
     )
 
 # fj
-def fugacity_j(T : float, P : float, components: dict, coefficients : dict, component_keyj):
-    # phij = exp(-lnphi_j(T, P, components, coefficients, component_keyj))
+def fugacity_j(T : float, P : float, components: dict, bips : dict, component_keyj):
+    # phij = exp(-lnphi_j(T, P, components, bips, component_keyj))
     if P == 0:
         return 0
-    phij = exp(lnphi_j(T, P*1E6, components, coefficients, component_keyj))
-    print("PROBLEME ICI, P EST NEG, MEME PB QUE AVANT, LE P PART DANS TOUS LES SENS : ")
+    phij = exp(lnphi_j(T, P*1E6, components, bips, component_keyj))
+    # print("PROBLEME ICI, P EST NEG, MEME PB QUE AVANT, LE P PART DANS TOUS LES SENS : ")
     yj = components[component_keyj].y
     # print(phij * yj * P)
     return phij * yj * P*1E6
 
 # Injecting in deltaMu_H
-def deltaMu_H(T, P, structure_cavities, components, coefficients: dict):
+def deltaMu_H(T, P, structure_cavities, components, bips: dict):
     # print('deltaH')
     sumi = 0
     print('Pc : ', P, T)
     cij = {component_key : (langmuir_ij(T, structure_cavities, components, i=0, component_keyj=component_key),
                             langmuir_ij(T, structure_cavities, components, i=1, component_keyj=component_key)) for component_key in sorted(components)}
     print('Pf :', P)
-    fj = {component_key : fugacity_j(T, P, components, coefficients, component_keyj=component_key) for component_key in sorted(components)}
+    fj = {component_key : fugacity_j(T, P, components, bips, component_keyj=component_key) for component_key in sorted(components)}
 
     # print(cij, fj)
     for i in range(len(structure_cavities)):
@@ -374,6 +375,7 @@ def deltaMu_H(T, P, structure_cavities, components, coefficients: dict):
         # TODO should it be nu or nu/nutot that is multiplied here ?
         nui = structure_cavities[i].nu
         sumi += nui * log(1 - sumthetai)
+    print(sumi)
     print(P, 'deltaH :', - R_IDEAL_GAS * T * sumi)
 
     # sumi = 0
@@ -381,7 +383,7 @@ def deltaMu_H(T, P, structure_cavities, components, coefficients: dict):
     #     sumj = 0
     #     for component_key in components:
     #         cij = langmuir_ij(T, structure_cavities, components, i, component_key)
-    #         fj = fugacity_j(T, P, components, coefficients, component_key)
+    #         fj = fugacity_j(T, P, components, bips, component_key)
     #         sumj += cij * fj
     #     nui = structure_cavities[i].nu
     #     sumi += nui * log(1 - sumj)
@@ -401,46 +403,51 @@ def thetas_iall(thetas : dict[str, tuple], components):
     sumthetaS = 0
     sumthetaL = 0
     for component_key in components:
-        sumthetaS += thetas[components[component_key].name][0]
-        sumthetaL += thetas[components[component_key].name][1]
+        sumthetaS += thetas[components[component_key].formula][0]
+        sumthetaL += thetas[components[component_key].formula][1]
     return sumthetaS, sumthetaL
 
 
 ## Optimisation (Kihara parameters)
 # interpolation from (P,T) data
 def PfromT_f(list_temp, list_pres):
-    return interp1d(x= list_temp, y= list_pres)
+    return interp1d(x= list_temp, y= list_pres, fill_value='extrapolate', bounds_error=False)
 def TfromP_f(list_pres, list_temp):
     # print(list_pres ,list_temp)
-    return interp1d(x= list_pres, y= list_temp)
+    return interp1d(x= list_pres, y= list_temp, fill_value='extrapolate', bounds_error=False)
+
+
+from scipy.optimize import brentq
 
 # calculates the P that verifies the deltaMus equality, i.e Peq, for a certain model i from literature
-def calculatePi(Ti, Pexpi, structurei, componentsi, coefficientsi):
+def calculatePi(Ti, Pexpi, structurei, componentsi, bipsi):
     print('start Pi with ', Pexpi, Ti)
-    def f(P, T = Ti, structure = structurei, components=componentsi,coefficients= coefficientsi):
-        muH = deltaMu_H(T, P, structure.cavities, components, coefficients)
-        muL = deltaMu_L(T, P, structure, components, coefficients)
-        print(muH, muL)
+    def f(P, T = Ti, structure = structurei, components=componentsi,bips= bipsi):
+        muH = deltaMu_H(T, P, structure.cavities, components, bips)
+        muL = deltaMu_L(T, P, structure, components, bips)
+        print(muH, muL, P)
         return muL - muH
-        # return deltaMu_H(T, P, structure.cavities, components, coefficients) - deltaMu_L(T, P, structure, components, coefficients)
-    P_i = newton(func= f, x0=Pexpi)
-    print('calculatePi : ' , P_i, f(P_i), deltaMu_L(Ti, P_i, structurei, componentsi, coefficientsi))
-    return (P_i, deltaMu_L(Ti, P_i, structurei, componentsi, coefficientsi))
+        # return deltaMu_H(T, P, structure.cavities, components, bips) - deltaMu_L(T, P, structure, components, bips)
+    # P_i = newton(func= f, x0=Pexpi)
+    P_i = brentq(f, a = 0, b = 500)
+    print('calculatePi : ' , P_i, f(P_i), deltaMu_L(Ti, P_i, structurei, componentsi, bipsi))
+    return (P_i, deltaMu_L(Ti, P_i, structurei, componentsi, bipsi))
 
+# TODO change newton to brentq
 # calculates the T that verifies the deltaMus equality, i.e Peq, for a certain model i from literature
-def calculateTi(Pi, Texpi, structurei, componentsi, coefficientsi):
-    def f(T, P = Pi, structure = structurei, components=componentsi,coefficients= coefficientsi):
-        return deltaMu_H(T, P, structure.cavities, components, coefficients) - deltaMu_L(T, P, structure, components, coefficients)
+def calculateTi(Pi, Texpi, structurei, componentsi, bipsi):
+    def f(T, P = Pi, structure = structurei, components=componentsi,bips= bipsi):
+        return deltaMu_H(T, P, structure.cavities, components, bips) - deltaMu_L(T, P, structure, components, bips)
     T_i = newton(func= f, x0=Texpi)
-    return (T_i, deltaMu_L(P = Pi, T= T_i, structure=structurei, components=componentsi, coefficients=coefficientsi))
+    return (T_i, deltaMu_L(P = Pi, T= T_i, structure=structurei, components=componentsi, bips=bipsi))
 
 
 # TODO CHANGE WITH ACUTAL ARGUMENTS
 # (note: the optimization is done for that component as sole component of the gas)
-def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, allPTinterpol, component_pure, structure, coefficients, list_models, n_T = 10):
+def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, allPTinterpol, component_pure, structure, bips, list_models, n_T = 10):
     sigma, epsilon = component_pure.sigma, component_pure.epsilon
-    PfromT = allPTinterpol[component_pure.name][0]
-    TfromP = allPTinterpol[component_pure.name][1]
+    PfromT = allPTinterpol[component_pure.formula][0]
+    TfromP = allPTinterpol[component_pure.formula][1]
     xy_P = []
     i = 0
     if structure.id == 'II':
@@ -452,23 +459,35 @@ def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, al
             structure.deltaMu0, structure.deltaH0 = float(model_values[i]['deltaMu0']), float(model_values[i]['deltaH0'])
             # NOTE : calculate Pi returns TWO values, one is delta TODO
             # PB : changing the values of the models makes P go negative....
-            xy_P += [ calculatePi(Ti = T1 + j*(T2 - T1)/n_T, Pexpi= calculate_unknownPfromT(T1 + j*(T2 - T1)/n_T, PfromT), structurei=structure, componentsi={component_pure.name : component_pure}, coefficientsi=coefficients) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of temp
+            xy_P += [ calculatePi(Ti = T1 + j*(T2 - T1)/n_T, Pexpi= calculate_unknownPfromT(T1 + j*(T2 - T1)/n_T, PfromT), structurei=structure, componentsi={component_pure.formula : component_pure}, bipsi=bips) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of temp
+            print(xy_P)
     structure.deltaMu0, structure.deltaH0 = prev_deltaMu0, prev_deltaH0
 
     # note: unlike deltaMu_L, deltaMu_H does not depend on the macroscopic values, so it is independent from the models that were used to get Pi
-    def f(P, eps, sig):
+    def f_Ki(P_values, eps, sig):
+        # component_pure.epsilon = eps
+        # component_pure.sigma = sig
+        # print('pb : ici, P est un array, pas une valeur unique')
+        # return deltaMu_H(T=calculateTfromP(P, TfromP), P=P, components={component_pure.formula : component_pure}, structure_cavities=structure.cavities, bips=bips)
         component_pure.epsilon = eps
         component_pure.sigma = sig
-        return deltaMu_H(T=calculateTfromP(P, TfromP), P=P, components={component_pure.name : component_pure}, structure_cavities=structure.cavities, coefficients=coefficients)
+        delta_values = np.array([deltaMu_H(T=calculateTfromP(P, TfromP), P=P, components={component_pure.formula : component_pure}, structure_cavities=structure.cavities, bips=bips)
+                                 for P in P_values])
+        print(P_values, delta_values)
+        return delta_values
 
-    popt, pcov = curve_fit(f, xdata=[item[0] for item in xy_P], ydata=[item[1] for item in xy_P], p0=[sigma, epsilon])
+    print('here starts optimization')
+    # TODO solve pb with curve_fit returning zeros for delta when going through f_Ki
+    print('final value detlaH : ',deltaMu_H(T=calculateTfromP(8.11, TfromP), P=8.11, components={component_pure.formula : component_pure}, structure_cavities=structure.cavities, bips=bips))
+    popt, pcov = curve_fit(f_Ki, xdata=[item[0] for item in xy_P], ydata=[item[1] for item in xy_P], p0=[sigma, epsilon])
+    print('popt etc : ', popt)
     return popt
 
 # TODO see above
-def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, allPTinterpol, component_pure, structure, coefficients, list_models, n_P = 10):
+def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, allPTinterpol, component_pure, structure, bips, list_models, n_P = 10):
     sigma, epsilon = component_pure.sigma, component_pure.epsilon
-    PfromT = allPTinterpol[component_pure.name][0]
-    TfromP = allPTinterpol[component_pure.name][1]
+    PfromT = allPTinterpol[component_pure.formula][0]
+    TfromP = allPTinterpol[component_pure.formula][1]
     xy_T = []
     i = 0
     if structure.id == 'II':
@@ -477,13 +496,13 @@ def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, al
         for model_values in list_models.values():
             prev_deltaMu0, prev_deltaH0 = structure.deltaMu0, structure.deltaH0
             structure.deltaMu0, structure.deltaH0 = float(model_values[i]['deltaMu0']), float(model_values[i]['deltaH0'])
-            xy_T += [ calculateTi(Pi = P1 + j*(P2 - P1)/n_P, Texpi= calculate_unknownTfromP(P1 + j*(P2 - P1)/n_P, TfromP), structurei=structure, componentsi={component_pure.name : component_pure}, coefficientsi=coefficients) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of pres
+            xy_T += [ calculateTi(Pi = P1 + j*(P2 - P1)/n_P, Texpi= calculate_unknownTfromP(P1 + j*(P2 - P1)/n_P, TfromP), structurei=structure, componentsi={component_pure.formula : component_pure}, bipsi=bips) ]           # return list of points [ (x1, y1), (x2, y2), (x1, y1), (x2, y2) ] for all models for a range of pres
     structure.deltaMu0, structure.deltaH0 = prev_deltaMu0, prev_deltaH0
 
     def f(T, eps, sig):
         component_pure.epsilon = eps
         component_pure.sigma = sig
-        return deltaMu_H(P=calculatePfromT(T, PfromT), T=T, components={component_pure.name : component_pure}, structure_cavities=structure.cavities, coefficients=coefficients)
+        return deltaMu_H(P=calculatePfromT(T, PfromT), T=T, components={component_pure.formula : component_pure}, structure_cavities=structure.cavities, bips=bips)
     popt, pcov = curve_fit(f, xdata=[item[0] for item in xy_T], ydata=[item[1] for item in xy_T], p0=[sigma, epsilon])
     return popt
 
@@ -526,12 +545,12 @@ results_test = {'Components' : [], 'Composition' : [], 'Temperature' : -1, 'Pres
 
 # print(components_test)
 # print(structure_test)
-# main(T=T_test, P=P_test, structure=structure_test, components=components_test, coefficients=coefficients_test, results=results_test)
+# main(T=T_test, P=P_test, structure=structure_test, components=components_test, bips=bips_test, results=results_test)
 # print(results_test)
 
 # print('langmuir : ', langmuir_ij(T_test, structure_test.cavities, components_test, 0, 'CH4'))
 
-# print(deltaMu_L(T_test, P_test, structure_test, components_test, coefficients_test))
+# print(deltaMu_L(T_test, P_test, structure_test, components_test, bips_test))
 
 # R en metres
 # k en m kg s K

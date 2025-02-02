@@ -33,8 +33,8 @@ class Structure:
         self.cavities = [small_cavity, big_cavity]
 
 class Component:
-    def __init__(self, name: str, component_id: int, y, Tc, Pc, epsilon, sigma, a, Vinf, k1, k2, omega) -> None:
-        self.name = name
+    def __init__(self, formula: str, component_id: int, y, Tc, Pc, epsilon, sigma, a, Vinf, k1, k2, omega) -> None:
+        self.formula = formula
         self.id = component_id
         self.y = y
         self.tc = Tc
@@ -50,11 +50,14 @@ class Component:
 
 def calculatePfromT(T, PfromT):
     """Returns the value of Pressure corresponding to a given value of Temperature, using a function previously obtained through 1D interpolation of literature equilibrium data"""
-    return PfromT._call(self=PfromT, x_new= T)
+    # P = PfromT._call(self=PfromT, x_new= T)
+    return PfromT(T)
+    # return PfromT._call(self=PfromT, x_new= T)
 
 def calculateTfromP(P, TfromP):
     """Returns the value of Temperature corresponding to a given value of Pressure, using a function previously obtained through 1D interpolation of literature equilibrium data"""
-    return TfromP._call(self = TfromP, x_new=P)
+    # return TfromP._call(self = TfromP, x_new=P)
+    return TfromP(P)
 
 def getInterpolFuncs(compo_foldername):
     """Returns interpolation functions of literature equilibrium data for Pressure and Temperature, for a given component"""
@@ -188,7 +191,7 @@ def main():
     with open(components_file, mode='r') as infile:
         reader = csv.DictReader(infile, skipinitialspace=True)
         compo_properties = [row for row in reader]
-    all_components = {compo_properties[row]['name'] : Component(name=compo_properties[row]['name'],
+    all_components = {compo_properties[row]['formula'] : Component(formula=compo_properties[row]['formula'],
                                                             component_id=int(compo_properties[row]['id']),
                                                             y=1.0,                                              # the molar fraction is initialized at 0, as it is in the components tree
                                                             Tc=float(compo_properties[row]['Tc']),
@@ -204,33 +207,44 @@ def main():
 
     # first optimization of Kihara parameters
     # for component in all_components.values():
-    # for component in {'N2': all_components['N2']}.values():
-    #     # print([(att, getattr(structures['I'],att)) for att in dir(structures['I'])])
-    #     epsilon, sigma = calc.optimisationKiharafromT(T1 = 273, T2=290, calculate_unknownPfromT=calculatePfromT, calculateTfromP=calculateTfromP,allPTinterpol=allInterpolPT, component_pure=component, structure=structures['I'], coefficients=bip, list_models= all_models, n_T=10)
-    #     component.epsilon = epsilon
-    #     component.sigma = sigma
-    #     print(epsilon, sigma)
+    for component in {'N2': all_components['N2']}.values():
+        # print([(att, getattr(structures['I'],att)) for att in dir(structures['I'])])
+        epsilon, sigma = calc.optimisationKiharafromT(T1 = 273, T2=290, calculate_unknownPfromT=calculatePfromT, calculateTfromP=calculateTfromP,allPTinterpol=allInterpolPT, component_pure=component, structure=structures['I'], bips=bip, list_models= all_models, n_T=10)
+        component.epsilon = epsilon
+        component.sigma = sigma
+        print(epsilon, sigma)
+        # TODO finish pb with curve_fit
+        print("FOR NOW STOP BUT AT SOME POINT PICK IT UP TO MAKE IT WORK")
 
-    ### TESTS for calc
-    # print(calc.fugacity_j(T=300, P=40E6, components={'N2': all_components['N2']},coefficients=bip, component_keyj= 'N2'))
-    # print('langmuir : ', calc.langmuir_ij(T=273, structure_cavities=[Cavity('6^1',3.91, 20, 16), Cavity('6^2',4.735, 28, 8)], components={'N2': all_components['N2']}, i = 1, component_keyj= 'N2'))
-    xP = np.linspace(0, 50, 1000)
-    # fig, (ax1, ax2) = plt.subplots(1, 2)
-    cav = [Cavity('5^1',3.91, 20, 0.0434), Cavity('5^2',4.33, 24, 0.1304)]
-    def yPL(x):
-        return [calc.deltaMu_L(T=273, P=x_unit, structure=Structure('I', 1714, 1400, -38.12, 0.141, 0.00000499644, cav[0], cav[1]),components={'N2': all_components['N2']},coefficients=bip) for x_unit in x]
-    def yPH(x):
-        return [calc.deltaMu_H(T=273, P=x_unit,structure_cavities=cav, components={'N2': all_components['N2']},coefficients=bip) for x_unit in x]
-    # for i in range(len(xP)):
-    #     print(xP[i], yPL(xP)[i], yPH(xP)[i])
-    # ax1.plot(xP, yPL(xP),color = 'red')
-    # ax1.plot(xP, yPH(xP))
-    plt.plot(xP, yPL(xP),color = 'red')
-    plt.plot(xP, yPH(xP))
-    plt.show()
 
-    # creation of the interface with the new run function that is created in this file
-    inter = Hydrate_interface(componentsDict=all_components, structuresDict=structures, interpolPT = allInterpolPT, bip = bip, all_models = all_models)
+    # ## test for Pfromt extrapolation etc
+    # inter_Test = allInterpolPT['N2'][0]
+    # xT = np.linspace(250, 300, 1000)
+    # plt.plot(xT, inter_Test(xT),color = 'red')
+    # plt.plot(xT, inter_Test(xT))
+    # print(inter_Test(300))
+    # plt.show()
+
+    # ### TESTS for calc
+    # # print(calc.fugacity_j(T=300, P=40E6, components={'N2': all_components['N2']},bips=bip, component_keyj= 'N2'))
+    # # print('langmuir : ', calc.langmuir_ij(T=273, structure_cavities=[Cavity('6^1',3.91, 20, 16), Cavity('6^2',4.735, 28, 8)], components={'N2': all_components['N2']}, i = 1, component_keyj= 'N2'))
+    # xP = np.linspace(0, 50, 1000)
+    # # fig, (ax1, ax2) = plt.subplots(1, 2)
+    # cav = [Cavity('5^1',3.91, 20, 0.0434), Cavity('5^2',4.33, 24, 0.1304)]
+    # def yPL(x):
+    #     return [calc.deltaMu_L(T=273, P=x_unit, structure=Structure('I', 1714, 1400, -38.12, 0.141, 0.00000499644, cav[0], cav[1]),components={'N2': all_components['N2']},bips=bip) for x_unit in x]
+    # def yPH(x):
+    #     return [calc.deltaMu_H(T=273, P=x_unit,structure_cavities=cav, components={'N2': all_components['N2']},bips=bip) for x_unit in x]
+    # # for i in range(len(xP)):
+    # #     print(xP[i], yPL(xP)[i], yPH(xP)[i])
+    # # ax1.plot(xP, yPL(xP),color = 'red')
+    # # ax1.plot(xP, yPH(xP))
+    # plt.plot(xP, yPL(xP),color = 'red')
+    # plt.plot(xP, yPH(xP))
+    # plt.show()
+
+    # # creation of the interface with the new run function that is created in this file
+    # inter = Hydrate_interface(componentsDict=all_components, structuresDict=structures, interpolPT = allInterpolPT, bip = bip, all_models = all_models)
 
 class Hydrate_interface(interface.Hydrate_interface_squelette):
     def __init__(self, **kw):
@@ -356,15 +370,15 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
         treeTemp.configure(columns=columnsTemp)
 
         for component_index in range(len(self.results['Components'])):
-            name = self.results['Components'][component_index]
+            formula = self.results['Components'][component_index]
             if component_index == 0:                                                                            # the first column of a tree (here, y0) needs to be treated seperately
-                treeTemp.heading('#0', text = f'y ({name})')
+                treeTemp.heading('#0', text = f'y ({formula})')
                 treeTemp.column('#0', width = 75)
-                print(name)
+                print(formula)
             else:
-                treeTemp.heading(f'y{component_index}', text = f'y ({name})')
+                treeTemp.heading(f'y{component_index}', text = f'y ({formula})')
                 treeTemp.column(f'y{component_index}', width = 75)
-            treeTemp.heading(f'compo{component_index}', text = f'x_H ({name})')
+            treeTemp.heading(f'compo{component_index}', text = f'x_H ({formula})')
             treeTemp.column(f'compo{component_index}', width = 75)
 
         treeTemp.heading("temp", text = "T (K)")
@@ -409,18 +423,18 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
         bip = self.bipDict
 
         # creation of the PfromT etc interpol functions for mixed gas, if they don't exist already
-        gas_name = '='.join(sorted(components))
-        components_names = tuple(sorted(components))
+        gas_formula = '='.join(sorted(components))
+        components_formulas = tuple(sorted(components))
         num = len(components)
-        if num > 1 and components_names not in self.PTinterpolDict.keys():
+        if num > 1 and components_formulas not in self.PTinterpolDict.keys():
             folder_name = DATA_FOLDER + PT_FOLDER + f'{num}CondensableElements/'
-            compo_foldername = folder_name + gas_name + '/'
-            self.PTinterpolDict[components_names] = getInterpolFuncs(compo_foldername)
+            compo_foldername = folder_name + gas_formula + '/'
+            self.PTinterpolDict[components_formulas] = getInterpolFuncs(compo_foldername)
         interpol = self.PTinterpolDict
 
 
         # lists of components and composition are updated in the results dictionnary
-        self.results['Components'] = [components[component_key].name for component_key in sorted(components)]
+        self.results['Components'] = [components[component_key].formula for component_key in sorted(components)]
         self.results['Composition'] = [ components[component_key].y for component_key in sorted(components)]
 
         ### calculate the rest of the values we need
@@ -445,27 +459,27 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
                     sorted_compo_keys = tuple(components.keys())[0]
                 # estimate P suppose Structure is I
                 structureI = structures['I']
-                PeqI = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0]), structurei=structureI, componentsi=components, coefficientsi=bip)[0]
+                PeqI = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0]), structurei=structureI, componentsi=components, bipsi=bip)[0]
                 print('here1')
                 # PeqI = calculatePfromT(Teq, interpol[sorted_compo_keys][0]) * 1E6
                 # TODO here: calculate Pi gives a very bad estimate, check langmuir...
                 print('PeqI :' , PeqI)
                 cijI = {component_key : (calc.langmuir_ij(T=Teq, structure_cavities=structureI.cavities, components=components, i=0, component_keyj=component_key),
                                         calc.langmuir_ij(T=Teq, structure_cavities=structureI.cavities, components=components, i=1, component_keyj=component_key)) for component_key in sorted(components)}
-                fjI = {component_key : calc.fugacity_j(T = Teq, P=PeqI, components=components, coefficients=bip, component_keyj=component_key) for component_key in sorted(components)}
+                fjI = {component_key : calc.fugacity_j(T = Teq, P=PeqI, components=components, bips=bip, component_keyj=component_key) for component_key in sorted(components)}
                 # print(cijI, fjI)
 
                 # repeat for Str II
                 # PeqII = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0]))
                 structureII = structures['II']
-                # PeqII = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0])*1E6, structurei=structureII, componentsi=components, coefficientsi=bip)[0]
+                # PeqII = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0])*1E6, structurei=structureII, componentsi=components, bipsi=bip)[0]
                 # print('I : ', PeqI, 'II : ', PeqII)
                 # PeqII = 17E6
                 PeqII = PeqI
                 # cijII = {component_key : (calc.langmuir_ij(0), calc.langmuir_ij(1)) for component_key in sorted(components)}
                 cijII = {component_key : (calc.langmuir_ij(T=Teq, structure_cavities=structureII.cavities, components=components, i=0, component_keyj=component_key),
                                         calc.langmuir_ij(T=Teq, structure_cavities=structureII.cavities, components=components, i=1, component_keyj=component_key)) for component_key in sorted(components)}
-                fjII = {component_key : calc.fugacity_j(T = Teq, P=PeqII, components=components, coefficients=bip, component_keyj=component_key) for component_key in sorted(components)}
+                fjII = {component_key : calc.fugacity_j(T = Teq, P=PeqII, components=components, bips=bip, component_keyj=component_key) for component_key in sorted(components)}
                 # print(cijII, fjII)
 
                 # determine which structure corresponds best to equilibrium
