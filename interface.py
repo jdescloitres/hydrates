@@ -277,7 +277,7 @@ class Hydrate_interface_squelette:
 
         RunBut = ButtonEnter(frameLD, text = "Run", command = self.run, width=7)
         RunBut.grid(row = 0, column = 0, sticky= tk.W, pady = 10, padx = 10)
-        optimizeBut = ButtonEnter(frameLD, text = "Optimize Kihara Parameters", command = self.optimizeKihara)
+        optimizeBut = ButtonEnter(frameLD, text = "Optimize Kihara Parameters", command = self.optimizeOrChooseKihara)
         optimizeBut.grid(row = 0, column=1, pady = 10, padx = 10)
         resetBut = ButtonEnter(frameLD, text = "Reset", command = self.reset, width = 7)
         resetBut.grid(row = 0, column=2, sticky=tk.E, pady = 10, padx = 10)
@@ -377,6 +377,77 @@ class Hydrate_interface_squelette:
     def run(self):
         pass
 
+    def optimizeOrChooseKihara(self):
+        top = tk.Toplevel(self.root)
+        top.geometry("650x150")
+
+        def select_compo(event):
+            entry_content = event.widget.get()
+            popup_var.set(entry_content)
+        def select_eps(event):
+            entry_content = event.widget.get()
+            eps_var.set(entry_content)
+        def select_sig(event):
+            entry_content = event.widget.get()
+            sig_var.set(entry_content)
+        def select_a(event):
+            entry_content = event.widget.get()
+            a_var.set(entry_content)
+
+        popup_var = tk.StringVar()
+        tk.Label(top, text= "Component to optimize :").grid(row = 0, column = 0, padx = 5)
+        Kihara_combo = ttk.Combobox(top, width=20, textvariable = popup_var, state = 'readonly')
+        Kihara_combo['values'] = [self.tree.item(child)['text'] for child in self.tree.get_children()]
+        # Kihara_combo['values'] = self.componentsList
+        Kihara_combo.grid(row=0, column = 2)
+        Kihara_combo.bind('<<ComboboxSelected>>', select_compo)
+        # print(component)
+
+        tk.Button(top, text="Calculate optimized Kihara parameters", command=lambda: self.optimizeKiharaAndClose(top)).grid(row = 0, column = 3, padx = 10)
+
+        sig_var = tk.StringVar()
+        eps_var = tk.StringVar()
+        a_var = tk.StringVar()
+        tk.Label(top, text= "epsilon / k :").grid(row = 3, column = 0, padx = 10)
+        entry_eps = tk.Entry(top, width= 15, textvariable=eps_var)
+        entry_eps.grid(row = 4, column=0)
+        tk.Label(top, text= "sigma :").grid(row = 3, column = 1, padx = 10)
+        entry_sig = tk.Entry(top, width= 15, textvariable=sig_var)
+        entry_sig.grid(row = 4, column=1)
+        tk.Label(top, text= "a :").grid(row = 3, column = 2, padx = 10)
+        entry_a = tk.Entry(top, width= 15, textvariable=a_var)
+        entry_a.grid(row = 4, column=2)
+
+        entry_eps.bind("<FocusOut>", select_eps)
+        entry_eps.bind("<Return>", select_eps)
+
+        entry_sig.bind("<FocusOut>", select_sig)
+        entry_sig.bind("<Return>", select_sig)
+
+        entry_a.bind("<FocusOut>", select_a)
+        entry_a.bind("<Return>", select_a)
+
+
+        # component = popup_var.get()
+        # print("compo is : ", component, popup_var.get(), chosen_eps)
+
+        tk.Label(top, text= "OR").grid(row = 2, column = 3, pady = 5, padx = 10)
+        tk.Button(top,text= "Choose Kihara parameters", command= lambda:self.chooseKihara(top, popup_var.get(), eps_var.get(), sig_var.get(), a_var.get())).grid(row = 4, column = 3, pady=10, padx = 10)
+
+
+    # def chooseKiharaAndClose(self, top):
+    #     top.destroy()
+    #     self.chooseKihara()
+
+    def chooseKihara(self, top, component, chosen_eps, chosen_sig, chosen_a):
+        self.allComponents[component].epsilon = chosen_eps
+        self.allComponents[component].sigma = chosen_sig
+        self.allComponents[component].a = chosen_a
+        top.destroy()
+
+    def optimizeKiharaAndClose(self, top):
+        top.destroy()
+        self.optimizeKihara()
 
     def optimizeKihara(self):
         pass
