@@ -107,7 +107,12 @@ class EntryFocusOut(tk.Entry):
             if event.widget == self.interface.tempEnt:
                 self.interface.results['Temperature'] = float(new_text)
             if event.widget == self.interface.presEnt:
-                self.interface.results['Pressure'] = float(new_text)
+                factor = 1
+                if self.interface.unit_var.get() == 'MPa':
+                    factor = 1E6
+                elif self.interface.unit_var.get() == 'bar':
+                    factor = 1E5
+                self.interface.results['Pressure'] = float(new_text) * factor
         else:
             if event.widget == self.interface.tempEnt:
                 self.interface.results['Temperature'] = -1
@@ -135,7 +140,12 @@ class EntryFocusOut(tk.Entry):
             if event.widget == self.interface.tempEnt:
                 self.interface.results['Temperature'] = float(new_text)
             if event.widget == self.interface.presEnt:
-                self.interface.results['Pressure'] = float(new_text)
+                factor = 1
+                if self.interface.unit_var.get() == 'MPa':
+                    factor = 1E6
+                elif self.interface.unit_var.get() == 'bar':
+                    factor = 1E5
+                self.interface.results['Pressure'] = float(new_text) * factor
         else:
             if event.widget == self.interface.tempEnt:
                 self.interface.results['Temperature'] = float(-1)
@@ -251,9 +261,16 @@ class Hydrate_interface_squelette:
         tk.Checkbutton(frameLU, text= "impose equilibrium temperature", state='active', variable=self.checkTemp_var, command=lambda : self.activateCheck(self.checkTemp_var, self.tempEnt)).grid(sticky= tk.W, row = 7, column=0, pady = 5, padx = 10)
 
         # Widgets for the setting of Pressure: checkbox to enable entry of value
-        tk.Label(frameLU, text= "Pressure (Pa) :").grid(sticky= tk.E, row = 8, column = 1, pady = 5, padx = 10)
-        self.presEnt = EntryFocusOut(frameLU, width=25, state='disabled', interface=self)
-        self.presEnt.grid(row= 8, column =2, padx = 5, pady=5, columnspan=2)
+        tk.Label(frameLU, text= "Pressure :").grid(sticky= tk.E, row = 8, column = 1, pady = 5, padx = 10)
+        self.presEnt = EntryFocusOut(frameLU, width=12, state='disabled', interface=self)
+        self.presEnt.grid(row= 8, column =2, padx = 5, pady=5, columnspan=1)
+        # Combobox to choose the unit for the pressure
+        self.unit_var = tk.StringVar()
+        self.unitCombo = ttk.Combobox(frameLU, width=8, textvariable = self.unit_var, state = 'disabled')
+        self.unitCombo['values'] = ['Pa', 'MPa', 'bar']
+        self.unitCombo.current(0)
+        self.unitCombo.grid(row=8, column = 3)
+        self.unitCombo.bind('<<ComboboxSelected>>', self.select_unit)
 
         # disable the entry of a pressure value is the checkbox is unchecked
         self.checkPres_var = tk.IntVar()
@@ -354,6 +371,17 @@ class Hydrate_interface_squelette:
         for item in self.tree.get_children():
             self.tree.item(item, values = 0.0)
 
+    def select_unit(self, event):
+        entry_content = event.widget.get()
+        self.unit_var.set(entry_content)
+        new_text = self.presEnt.get()
+        if new_text != '':
+            factor = 1
+            if self.unit_var.get() == 'MPa':
+                factor = 1E6
+            elif self.unit_var.get() == 'bar':
+                factor = 1E5
+            self.results['Pressure'] = float(new_text) * factor
 
     def activateCheck(self, var, widget):
         """Makes sure that Temperature, Pressure or Structure choice is enabled/disabled according to their corresponding checkbutton"""
@@ -362,9 +390,13 @@ class Hydrate_interface_squelette:
                 widget.config(state='readonly')
             else:
                 widget.config(state='normal')
+                if widget == self.presEnt:
+                    self.unitCombo.config(state='readonly')
             widget.focus()
         elif var.get() == 0:        # unchecked
             widget.config(state='disabled')
+            if widget == self.presEnt:
+                self.unitCombo.config(state='disabled')
             # at least one of Pressure or Temperature has to be entered, otherwise the calculations will not work
             if widget == self.tempEnt and self.checkPres_var.get() == 0:
                 self.checkPres_var.set(1)
