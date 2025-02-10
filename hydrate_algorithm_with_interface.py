@@ -82,11 +82,16 @@ def getInterpolFuncs(compo_foldername):
 
     # the interpolation functions are created using all references data
     PfromT = calc.PfromT_f(list_temp = list_temp, list_pres=list_pres)
+    xTmin = min(list_temp)
+    xTmax = max(list_temp)
     TfromP = calc.TfromP_f(list_pres = list_pres, list_temp = list_temp)
+    xPmin = min(list_pres)
+    xPmax = max(list_pres)
+
 
     # PfromT = id
     # TfromP = id
-    return (PfromT, TfromP)
+    return ((PfromT, xTmin, xTmax), (TfromP, xPmin, xPmax))
 
 def main():
     """Initializes the interface with data from literature"""
@@ -207,18 +212,20 @@ def main():
 
     # first optimization of Kihara parameters
     # for component in all_components.values():
-    for component in {'N2': all_components['N2']}.values():
-        # print([(att, getattr(structures['I'],att)) for att in dir(structures['I'])])
-        epsilon, sigma = calc.optimisationKiharafromT(T1 = 273, T2=290, calculate_unknownPfromT=calculatePfromT, calculateTfromP=calculateTfromP,allPTinterpol=allInterpolPT, component_pure=component, structure=structures['I'], bips=bip, list_models= all_models, n_T=10)
-        component.epsilon = epsilon
-        component.sigma = sigma
-        print(epsilon, sigma)
-        # TODO finish pb with curve_fit
-        print("FOR NOW STOP BUT AT SOME POINT PICK IT UP TO MAKE IT WORK")
+    # for component in {'N2': all_components['N2']}.values():
+    #     # print([(att, getattr(structures['I'],att)) for att in dir(structures['I'])])
+    #     T1 = allInterpolPT[component.formula][0][1]
+    #     T2 = allInterpolPT[component.formula][0][2]
+    #     epsilon, sigma = calc.optimisationKiharafromT(T1 = T1, T2=T2, calculate_unknownPfromT=calculatePfromT, calculateTfromP=calculateTfromP,allPTinterpol=allInterpolPT, component_pure=component, structure=structures['I'], bips=bip, list_models= all_models, n_T=10)
+    #     component.epsilon = epsilon
+    #     component.sigma = sigma
+    #     # print(epsilon, sigma)
+    #     # TODO finish pb with curve_fit
+    #     print("FOR NOW STOP BUT AT SOME POINT PICK IT UP TO MAKE IT WORK")
 
 
     # ## test for Pfromt extrapolation etc
-    # inter_Test = allInterpolPT['N2'][0]
+    # inter_Test = allInterpolPT['N2'][0][0]
     # xT = np.linspace(250, 300, 1000)
     # plt.plot(xT, inter_Test(xT),color = 'red')
     # plt.plot(xT, inter_Test(xT))
@@ -243,8 +250,8 @@ def main():
     # plt.plot(xP, yPH(xP))
     # plt.show()
 
-    # # creation of the interface with the new run function that is created in this file
-    # inter = Hydrate_interface(componentsDict=all_components, structuresDict=structures, interpolPT = allInterpolPT, bip = bip, all_models = all_models)
+    # creation of the interface with the new run function that is created in this file
+    inter = Hydrate_interface(componentsDict=all_components, structuresDict=structures, interpolPT = allInterpolPT, bip = bip, all_models = all_models)
 
 class Hydrate_interface(interface.Hydrate_interface_squelette):
     def __init__(self, **kw):
@@ -306,7 +313,7 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
         #     compo_folder_name = parent_folder + compo_name +'/'
         #     print(compo_folder_name)
         #     self.PTinterpolDict[tree_components]=getInterpolFuncs(compo_foldername = compo_folder_name)
-        # print(calculatePfromT(275, self.PTinterpolDict[tree_components][0]))
+        # print(calculatePfromT(275, self.PTinterpolDict[tree_components][0][0]))
 
         ### differenciate how the tree is to be built depending on components
         # if this is the first round, i.e. if the initial results tree was empty before, the initial tree is used
@@ -385,8 +392,10 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
         treeTemp.heading("pres", text = "Peq (Pa)")
         treeTemp.heading("struct", text = "Structure")
         treeTemp.heading("tocc_tot", text = "Total Occ")
-        treeTemp.heading("toccS_tot", text = f"{small_cavity.name}")
-        treeTemp.heading("toccL_tot", text = f"{big_cavity.name}")
+        # treeTemp.heading("toccS_tot", text = f"{small_cavity.name}")
+        # treeTemp.heading("toccL_tot", text = f"{big_cavity.name}")
+        treeTemp.heading("toccS_tot", text = "Small cavity")
+        treeTemp.heading("toccL_tot", text = "Large cavity")
         treeTemp.column("temp", width = 35)
         treeTemp.column("pres", width = 75)
         treeTemp.column("struct", width = 60)
@@ -459,20 +468,20 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
                     sorted_compo_keys = tuple(components.keys())[0]
                 # estimate P suppose Structure is I
                 structureI = structures['I']
-                PeqI = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0]), structurei=structureI, componentsi=components, bipsi=bip)[0]
+                PeqI = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0][0]), structurei=structureI, componentsi=components, bipsi=bip)[0]
                 print('here1')
-                # PeqI = calculatePfromT(Teq, interpol[sorted_compo_keys][0]) * 1E6
+                # PeqI = calculatePfromT(Teq, interpol[sorted_compo_keys][0][0]) * 1E6
                 # TODO here: calculate Pi gives a very bad estimate, check langmuir...
-                print('PeqI :' , PeqI)
+                print('PeqI :' , PeqI, Teq, sorted_compo_keys)
                 cijI = {component_key : (calc.langmuir_ij(T=Teq, structure_cavities=structureI.cavities, components=components, i=0, component_keyj=component_key),
                                         calc.langmuir_ij(T=Teq, structure_cavities=structureI.cavities, components=components, i=1, component_keyj=component_key)) for component_key in sorted(components)}
                 fjI = {component_key : calc.fugacity_j(T = Teq, P=PeqI, components=components, bips=bip, component_keyj=component_key) for component_key in sorted(components)}
                 # print(cijI, fjI)
 
                 # repeat for Str II
-                # PeqII = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0]))
+                # PeqII = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0][0]))
                 structureII = structures['II']
-                # PeqII = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0])*1E6, structurei=structureII, componentsi=components, bipsi=bip)[0]
+                # PeqII = calc.calculatePi(Ti = Teq, Pexpi = calculatePfromT(Teq, interpol[sorted_compo_keys][0][0])*1E6, structurei=structureII, componentsi=components, bipsi=bip)[0]
                 # print('I : ', PeqI, 'II : ', PeqII)
                 # PeqII = 17E6
                 PeqII = PeqI
@@ -497,6 +506,7 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
                 self.results['Structure'] = struct.id
                 print(cij, fj)
 
+        # TODO
         # if T is not given
         elif TisCalculated:
             Peq = float(self.results['Pressure'])
@@ -508,7 +518,7 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
             # estimate P suppose Structure is I
             # Teq = 'Tcalc'
             print(Peq)
-            Teq = calculateTfromP(Peq, interpol[sorted_compo_keys][1])
+            Teq = calculateTfromP(Peq, interpol[sorted_compo_keys][1][0])
             # Peq = self.results['Pressure']
             # # if the structure used is known, we can directly get the corresponding values
             # if not StrisCalculated:
@@ -597,13 +607,27 @@ class Hydrate_interface(interface.Hydrate_interface_squelette):
 
     def optimizeKihara(self):
         """Opitmizes the Kihara Parameters using models from literature, when the Optimize button is clicked"""
-        list_models = self.modelsDict
+
+        # list_models = self.modelsDict
         for item in self.tree.get_children():
             component, compo_key = self.allComponents[self.tree.item(item)['text']], self.tree.item(item)['text']
             print(component, compo_key)
             # TODO how to choose P or T, and which bounds P1 P2 to choose ==> window comes on ?
+            T1 = self.PTinterpolDict[component.formula][0][1]
+            T2 = self.PTinterpolDict[component.formula][0][2]
             # calc.optimisationKiharafromP(component_pure=component, kw=list_models)
             # calc.optimisationKiharafromT(component_pure=component)
+            epsilon, sigma = calc.optimisationKiharafromT(T1 = T1, T2=T2,
+                                                          calculate_unknownPfromT=calculatePfromT,
+                                                          calculateTfromP=calculateTfromP,
+                                                          allPTinterpol=self.PTinterpolDict,
+                                                          component_pure=component,
+                                                          structure=self.structuresDict['I'],
+                                                          bips=self.bipDict,
+                                                          list_models= self.modelsDict, n_T=10)
+            P1 = self.PTinterpolDict[component.formula][1][1]
+            P2 = self.PTinterpolDict[component.formula][1][2]
+            print('howdy here', epsilon, sigma)
             # if self.PisCalculated:
             #     pass
         # return super().optimizeKihara()

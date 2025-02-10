@@ -446,8 +446,8 @@ def calculateTi(Pi, Texpi, structurei, componentsi, bipsi):
 # (note: the optimization is done for that component as sole component of the gas)
 def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, allPTinterpol, component_pure, structure, bips, list_models, n_T = 10):
     sigma, epsilon = component_pure.sigma, component_pure.epsilon
-    PfromT = allPTinterpol[component_pure.formula][0]
-    TfromP = allPTinterpol[component_pure.formula][1]
+    PfromT = allPTinterpol[component_pure.formula][0][0]
+    TfromP = allPTinterpol[component_pure.formula][1][0]
     xy_P = []
     i = 0
     if structure.id == 'II':
@@ -486,8 +486,8 @@ def optimisationKiharafromT(T1, T2, calculate_unknownPfromT, calculateTfromP, al
 # TODO see above
 def optimisationKiharafromP(P1, P2, calculate_unknownTfromP, calculatePfromT, allPTinterpol, component_pure, structure, bips, list_models, n_P = 10):
     sigma, epsilon = component_pure.sigma, component_pure.epsilon
-    PfromT = allPTinterpol[component_pure.formula][0]
-    TfromP = allPTinterpol[component_pure.formula][1]
+    PfromT = allPTinterpol[component_pure.formula][0][0]
+    TfromP = allPTinterpol[component_pure.formula][1][0]
     xy_T = []
     i = 0
     if structure.id == 'II':
